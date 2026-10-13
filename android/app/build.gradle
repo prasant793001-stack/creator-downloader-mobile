@@ -1,0 +1,37 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'app.creatordownloader'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "app.creatordownloader.mobile"
+        minSdk 29          // Android 10+: saves to Downloads without storage permission
+        targetSdk 34
+        versionCode 1
+        versionName "1.2.0"
+    }
+
+    signingConfigs {
+        release {
+            storeFile file('release.keystore')
+            storePassword 'creatordownloader'
+            keyAlias 'cd'
+            keyPassword 'creatordownloader'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

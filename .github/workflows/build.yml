@@ -1,0 +1,83 @@
+name: Build Creator Downloader for Android
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: Build APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Bundle the app interface
+        run: |
+          rm -rf android/app/src/main/assets/www
+          mkdir -p android/app/src/main/assets
+          cp -r www android/app/src/main/assets/www
+          rm -f android/app/src/main/assets/www/sw.js
+
+      - name: Build signed APK
+        run: |
+          set -o pipefail
+          gradle -p android assembleRelease --no-daemon --stacktrace 2>&1 | tee build.log
+
+      - name: Name the APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk CreatorDownloader.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CreatorDownloader-APK
+          path: CreatorDownloader.apk
+
+      - name: Publish as the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest CreatorDownloader.apk \
+            --title "Creator Downloader for Android" \
+            --notes "Tap CreatorDownloader.apk to download, then open it to install. Built from ${GITHUB_SHA::7}."
+
+      - name: Keep the build log if something failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+
+  web:
+    name: Publish web version
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: www
+      - id: deploy
+        uses: actions/deploy-pages@v4

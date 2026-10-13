@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0a1f">
+<title>Creator Downloader</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <button class="brand" id="goHome" type="button" aria-label="Home"><span class="mark" id="logoMark"></span><span class="word">Creator<b>DL</b></span></button>
+  <form class="tsearch" id="topSearch" role="search">
+    <input id="tq" type="search" enterkeyhint="search" placeholder="Search free images & videos" autocomplete="off" aria-label="Search">
+    <button type="submit" aria-label="Search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></button>
+  </form>
+</header>
+
+<!-- HOME -->
+<main class="view" id="v-home">
+  <section class="hero">
+    <p class="eyebrow">10 free libraries · one tap</p>
+    <h1 class="title">Every free <span class="hl">frame.</span></h1>
+    <div class="ideas" id="ideas"></div>
+  </section>
+  <section class="sec">
+    <div class="sechead"><h2 class="sect"><span>Today's</span> picks</h2><button class="chip" id="picksMore" type="button"></button></div>
+    <div class="grid" id="picksGrid"></div>
+  </section>
+  <section class="sec">
+    <h2 class="sect"><span>The</span> crew</h2>
+    <div class="crew" id="crew"></div>
+  </section>
+</main>
+
+<!-- SEARCH -->
+<main class="view" id="v-search" hidden>
+  <div class="filters">
+    <div class="seg" id="typeSeg"><button type="button" data-v="all" aria-pressed="true">All</button><button type="button" data-v="image" aria-pressed="false">Images</button><button type="button" data-v="video" aria-pressed="false">Videos</button></div>
+    <select id="lic" aria-label="License"><option value="all">All free</option><option value="commercial">Commercial OK</option><option value="nocredit">No credit</option></select>
+    <select id="pref" aria-label="1-tap quality"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option><option value="original">Original</option></select>
+  </div>
+  <div class="reshead"><h1 id="heading">Search</h1><p id="summary"></p></div>
+  <button class="pinbtn" id="pinSearch" type="button" hidden>Search “<span></span>” on Pinterest</button>
+  <div class="grid" id="grid"></div>
+  <div class="more"><button class="cta" id="moreBtn" type="button" hidden>Load more</button></div>
+</main>
+
+<!-- BULK -->
+<main class="view" id="v-bulk" hidden>
+  <h1 class="sect"><span>Bulk</span> download</h1>
+  <p class="lead">Paste lyrics or text, or load a .txt / .md file. Each line becomes a search; the best pictures for every line are downloaded into their own folder.</p>
+  <section class="card">
+    <textarea id="bText" rows="7" class="input" placeholder="One idea per line&#10;&#10;I walk along the empty ocean shore&#10;We're dancing in the neon rain"></textarea>
+    <div class="row2">
+      <label class="chip filebtn">Load file<input type="file" id="bFile" accept=".txt,.md,.markdown,.lrc,.srt,text/plain,text/markdown" hidden></label>
+      <input class="input" id="bName" placeholder="Project name" maxlength="60">
+    </div>
+    <div class="opts">
+      <label><span>Best per line</span><select id="bCount"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+      <label><span>Pinterest picks</span><select id="bPin"><option value="0">None</option><option>1</option><option>2</option><option selected>3</option></select></label>
+      <label><span>Shape</span><select id="bShape"><option value="any">Any</option><option value="landscape">Landscape</option><option value="portrait" selected>Portrait</option><option value="square">Square</option></select></label>
+      <label><span>License</span><select id="bLic"><option value="all">All free</option><option value="commercial">Commercial OK</option><option value="nocredit">No credit</option></select></label>
+    </div>
+    <label class="check"><input type="checkbox" class="toggle" id="bSkip" checked> Skip repeated lines</label>
+    <button class="cta wide" id="bMake" type="button">Make search list</button>
+  </section>
+  <section class="card" id="bStep2" hidden>
+    <div class="bbar"><h2 id="bCountLbl"></h2><button class="chip" id="bOpen" type="button">Folder</button></div>
+    <div class="bprog" id="bProg" hidden><i></i><span></span></div>
+    <ol class="blist" id="bList"></ol>
+    <div class="bact">
+      <button class="chip" id="bPause" type="button" hidden>Pause</button>
+      <button class="chip" id="bStop" type="button" hidden>Stop</button>
+      <button class="cta wide" id="bStart" type="button">Start bulk download</button>
+      <button class="pinbtn" id="bPinGo" type="button" hidden>Pick from Pinterest, line by line</button>
+    </div>
+  </section>
+</main>
+
+<!-- DOWNLOADS -->
+<main class="view" id="v-downloads" hidden>
+  <div class="bbar"><h1 class="sect"><span>Your</span> downloads</h1></div>
+  <div class="row2"><button class="chip" id="openFolder" type="button">Open Downloads</button><button class="chip" id="clearDone" type="button">Clear list</button></div>
+  <p class="note" id="dWhere"></p>
+  <div class="dlist" id="dList"></div>
+</main>
+
+<!-- PROFILE -->
+<main class="view" id="v-profile" hidden>
+  <div class="pcard"><div id="pAvatar"></div><div><b id="pName">Creator</b><span id="pRole"></span></div></div>
+  <nav class="ptabs" id="ptabs"><button data-p="account" aria-current="page">Account</button><button data-p="connectors">Connectors</button><button data-p="downloader">Downloader</button><button data-p="websites">Websites</button><button data-p="about">About</button></nav>
+  <section id="ppage"></section>
+</main>
+
+<nav class="tabbar" id="tabbar">
+  <button data-v="home" aria-current="page"><svg viewBox="0 0 24 24"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/></svg>Home</button>
+  <button data-v="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>Search</button>
+  <button data-v="bulk"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Bulk</button>
+  <button data-v="downloads"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m6.5 10 5.5 5.5 5.5-5.5"/><path d="M4 20h16"/></svg>Downloads<span class="badge" id="dlBadge" hidden>0</span></button>
+  <button data-v="profile"><span class="av" id="avatarMini"></span>Profile</button>
+</nav>
+
+<div class="sheet" id="sheet" hidden><div class="sheetbg" data-close></div><div class="sheetbody" id="sheetBody"></div></div>
+<div id="toasts"></div>
+<div id="fx" aria-hidden="true"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
