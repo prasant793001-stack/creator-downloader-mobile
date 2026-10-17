@@ -47,7 +47,7 @@ export const terms = q => (String(q).toLowerCase().match(/[\p{L}\p{N}]+/gu) || [
 // Metadata score 0..1 from title/tags match, size, shape and license.
 export function metaScore(it, q, { shape = "any", lic = "all" } = {}) {
   const want = terms(q);
-  const hay = new Set(terms([it.title, it.tags, it.author].filter(Boolean).join(" ")));
+  const hay = new Set(terms([it.title, it.tags, it.desc].filter(Boolean).join(" ")));
   const hit = want.length ? want.filter(w => hay.has(w) || [...hay].some(h => h.startsWith(w) || w.startsWith(h))).length / want.length : 0.5;
   const px = Math.min(it.w || 0, it.h || 0);
   const size = px ? Math.min(1, Math.log2(Math.max(px, 200) / 200) / Math.log2(2400 / 200)) : 0.35;
@@ -118,22 +118,29 @@ export async function analyzeImage(dataUrl) {
 }
 
 // Choose the best `count` items: metadata pre-rank, pixel analysis on the top few, no near-duplicates, mixed sources.
-export async function pickBest(items, q, opts, analyze) {
+// Choose the best `count` items. Every candidate must pass the picture checker (it.check.ok);
+// then quality (size, shape, license, sharpness, exposure) decides the order. Near-duplicates are skipped
+// and sources are mixed. Returns { picks, checked, rejected }.
+export async function pickBest(items, q, opts, { analyze, check } = {}) {
   const ranked = items.map(it => ({ it, m: metaScore(it, q, opts) })).filter(x => x.m >= 0).sort((a, b) => b.m - a.m);
-  const pool = ranked.slice(0, Math.max(opts.count * 4, 10));
-  await Promise.all(pool.map(async x => {
-    try { const st = await analyze(x.it); if (st) { x.st = st; } } catch {}
-  }));
-  for (const x of pool) x.score = x.st ? 0.62 * x.m + 0.38 * x.st.q - (x.st.notes.length ? 0.08 * x.st.notes.length : 0) : x.m * 0.9;
-  pool.sort((a, b) => b.score - a.score);
+  const pool = ranked.slice(0, Math.max(opts.count * 6, 24));
+  if (check) await check(pool.map(x => x.it));
+  const passed = pool.filter(x => !check || x.it.check?.ok);
+  await Promise.all(passed.map(async x => { try { const st = analyze ? await analyze(x.it) : null; if (st) x.st = st; } catch {} }));
+  for (const x of passed) {
+    const match = x.it.check ? x.it.check.score : x.m;
+    const qual = x.st ? x.st.q - 0.08 * x.st.notes.length : 0.5;
+    x.score = 0.6 * match + 0.2 * x.m + 0.2 * qual;
+  }
+  passed.sort((a, b) => b.score - a.score);
   const picks = [], perSource = {};
-  for (const x of pool) {
+  for (const x of passed) {
     if (picks.length >= opts.count) break;
     if (x.st && picks.some(p => p.st && hamming(p.st.hash, x.st.hash) <= 6)) continue;   // near-duplicate
-    if ((perSource[x.it.source] || 0) >= Math.ceil(opts.count / 2) && pool.length > opts.count * 2) continue; // mix sources
+    if ((perSource[x.it.source] || 0) >= Math.ceil(opts.count / 2) && passed.length > opts.count * 2) continue; // mix sources
     perSource[x.it.source] = (perSource[x.it.source] || 0) + 1;
     picks.push(x);
   }
-  for (const x of pool) { if (picks.length >= opts.count) break; if (!picks.includes(x)) picks.push(x); }
-  return picks;
+  for (const x of passed) { if (picks.length >= opts.count) break; if (!picks.includes(x) && !(x.st && picks.some(p => p.st && hamming(p.st.hash, x.st.hash) <= 6))) picks.push(x); }
+  return { picks, checked: pool.length, rejected: pool.length - passed.length };
 }

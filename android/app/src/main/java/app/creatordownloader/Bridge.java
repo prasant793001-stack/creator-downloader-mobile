@@ -1,6 +1,5 @@
 package app.creatordownloader;
 
-import android.content.Intent;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebStorage;
@@ -81,15 +80,22 @@ public class Bridge {
                 final String url = a.getString(0);
                 act.runOnUiThread(() -> act.openExternal(url));
                 return Boolean.TRUE;
-            case "pinOpen": {
-                JSONObject o = a.getJSONObject(0);
-                Intent i = new Intent(act, PinterestActivity.class);
-                i.putExtra("query", o.optString("query", ""));
-                i.putExtra("label", o.optString("label", ""));
-                i.putExtra("need", o.optInt("need", 0));
-                JSONArray sub = o.optJSONArray("subdir");
-                if (sub != null) i.putExtra("subdir", sub.toString());
-                act.runOnUiThread(() -> act.startActivity(i));
+            case "pinShow": {
+                final JSONObject o = a.getJSONObject(0);
+                act.runOnUiThread(() -> act.pin.show(o));
+                return Boolean.TRUE;
+            }
+            case "pinLayout": {
+                final JSONObject r = a.optJSONObject(0);
+                act.runOnUiThread(() -> act.pin.layout(r));
+                return Boolean.TRUE;
+            }
+            case "pinHide":
+                act.runOnUiThread(() -> act.pin.hide());
+                return Boolean.TRUE;
+            case "pinNav": {
+                final String what = a.optString(0, "");
+                act.runOnUiThread(() -> act.pin.nav(what));
                 return Boolean.TRUE;
             }
             case "pinSignOut":

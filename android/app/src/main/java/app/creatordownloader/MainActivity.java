@@ -28,6 +28,8 @@ public class MainActivity extends Activity {
     static MainActivity instance;
     WebView web;
     Bridge bridge;
+    PinPanel pin;
+    android.widget.FrameLayout root;
     private ValueCallback<Uri[]> fileCallback;
 
     @Override
@@ -78,6 +80,12 @@ public class MainActivity extends Activity {
 
         web.setWebChromeClient(new WebChromeClient() {
             @Override
+            public boolean onConsoleMessage(android.webkit.ConsoleMessage m) {
+                android.util.Log.i("CDApp", m.messageLevel() + " " + m.message() + (m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR ? " @" + m.sourceId() + ":" + m.lineNumber() : ""));
+                return true;
+            }
+
+            @Override
             public boolean onShowFileChooser(WebView v, ValueCallback<Uri[]> cb, FileChooserParams params) {
                 if (fileCallback != null) fileCallback.onReceiveValue(null);
                 fileCallback = cb;
@@ -97,8 +105,12 @@ public class MainActivity extends Activity {
 
         bridge = new Bridge(this, web);
         web.addJavascriptInterface(bridge, "AndroidCD");
-        setContentView(web);
-        web.loadUrl("https://" + HOST + "/index.html");
+        root = new android.widget.FrameLayout(this);
+        root.addView(web, new android.widget.FrameLayout.LayoutParams(-1, -1));
+        setContentView(root);
+        pin = new PinPanel(this, root);
+        String test = getIntent() != null ? getIntent().getStringExtra("selftest") : null;
+        web.loadUrl("https://" + HOST + "/index.html" + (test != null ? "?selftest=" + Uri.encode(test) : ""));
     }
 
     @Override
@@ -113,6 +125,7 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
+        if (pin != null && pin.back()) return;
         // Let the interface close an open sheet first; otherwise leave the app.
         web.evaluateJavascript("(function(){var s=document.getElementById('sheet');if(s&&!s.hidden){s.hidden=true;return 'closed';}return 'none';})()", value -> {
             if (value == null || !value.contains("closed")) superBack();
@@ -121,6 +134,12 @@ public class MainActivity extends Activity {
 
     private void superBack() {
         super.onBackPressed();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        android.webkit.CookieManager.getInstance().flush();
     }
 
     @Override
@@ -146,7 +165,8 @@ public class MainActivity extends Activity {
     static String mime(String path) {
         String p = path.toLowerCase();
         if (p.endsWith(".html")) return "text/html";
-        if (p.endsWith(".js")) return "text/javascript";
+        if (p.endsWith(".js") || p.endsWith(".mjs")) return "text/javascript";
+        if (p.endsWith(".wasm")) return "application/wasm";
         if (p.endsWith(".css")) return "text/css";
         if (p.endsWith(".json") || p.endsWith(".webmanifest")) return "application/json";
         if (p.endsWith(".png")) return "image/png";

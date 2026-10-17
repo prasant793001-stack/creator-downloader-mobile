@@ -4,6 +4,8 @@
 export const keys = { pexels: "", pixabay: "", unsplash: "", youtube: "" };
 
 const strip = h => { const d = document.createElement("div"); d.innerHTML = String(h ?? ""); return (d.textContent || "").trim(); };
+// Words from a URL slug, e.g. pexels.com/photo/red-apple-on-table-123/ -> "red apple on table"
+const slugWords = u => { const m = String(u || "").match(/\/(?:photo|video)\/([^/?#]+?)(?:-\d+)?\/?(?:[?#]|$)/); const w = m ? decodeURIComponent(m[1]).replace(/-/g, " ").trim() : ""; return /^[\d\s]*$/.test(w) ? "" : w; };
 const https = u => u ? String(u).replace(/^http:\/\//, "https://") : u;
 export const qs = o => Object.entries(o).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v)).join("&");
 export const ext = u => { const m = String(u).split("?")[0].match(/\.([a-z0-9]{2,5})$/i); return m ? m[1].toLowerCase() : ""; };
@@ -25,10 +27,10 @@ export const LIC_LABEL = { nocredit: "No credit", credit: "Credit", nc: "Restric
 export function pick(variants, pref) {
   const vs = [...variants].filter(v => v.url).sort((a, b) => (a.w || 0) - (b.w || 0));
   if (!vs.length) return null;
-  if (pref === "original") return vs.at(-1);
+  if (pref === "original") return vs[vs.length - 1];
   const max = { small: 800, medium: 1600, large: 2560 }[pref] || 2560;
   const fit = vs.filter(v => (v.w || 0) <= max && !/tiff?$/i.test(ext(v.url)));
-  return fit.at(-1) || vs[0];
+  return fit[fit.length - 1] || vs[0];
 }
 
 export const SOURCES = {
@@ -38,7 +40,8 @@ export const SOURCES = {
       const d = await getJSON("https://api.openverse.org/v1/images/?" + qs({ q, page, page_size: 20, mature: "false" }));
       return d.results.map(r => ({
         uid: "ov-" + r.id, source: "openverse", type: "image",
-        title: r.title || q, thumb: r.thumbnail, w: r.width, h: r.height,
+        title: r.title || "Untitled", thumb: r.thumbnail, w: r.width, h: r.height,
+        tags: (r.tags || []).map(t => t.name).join(", "), desc: "",
         author: r.creator, authorUrl: r.creator_url, page: r.foreign_landing_url,
         license: ("CC " + (r.license || "") + " " + (r.license_version || "")).toUpperCase().replace("CC PDM", "Public Domain Mark").replace("CC CC0", "CC0"),
         credit: r.attribution,
@@ -82,6 +85,7 @@ export const SOURCES = {
             uid: "wm-" + pg.pageid, source: "wikimedia", type: t, title,
             thumb: info.thumburl || info.url, preview: isV ? (variants.find(v => v.h && v.h <= 480) || variants[0]).url : null,
             w: info.width, h: info.height, author: strip(m.Artist?.value), page: info.descriptionurl,
+            tags: strip(m.Categories?.value).replace(/\|/g, ", "), desc: strip(m.ImageDescription?.value).slice(0, 400),
             license: strip(m.LicenseShortName?.value) || "See file page", variants
           });
         }
@@ -99,6 +103,7 @@ export const SOURCES = {
         return {
           uid: "nasa-" + m.nasa_id, source: "nasa", type: m.media_type === "video" ? "video" : "image",
           title: m.title, thumb, author: m.photographer || m.secondary_creator || m.center || "NASA",
+          tags: (m.keywords || []).join(", "), desc: strip(m.description || "").slice(0, 400),
           page: "https://images.nasa.gov/details/" + encodeURIComponent(m.nasa_id), license: "Public domain (NASA media guidelines)",
           variants: null,
           async loadVariants() {
@@ -119,13 +124,14 @@ export const SOURCES = {
   artic: {
     name: "Art Institute of Chicago", types: ["image"], key: null,
     async search(q, type, page) {
-      const d = await getJSON("https://api.artic.edu/api/v1/artworks/search?" + qs({ q, page, limit: 20, "query[term][is_public_domain]": "true", fields: "id,title,image_id,artist_display,thumbnail" }));
+      const d = await getJSON("https://api.artic.edu/api/v1/artworks/search?" + qs({ q, page, limit: 20, "query[term][is_public_domain]": "true", fields: "id,title,image_id,artist_display,thumbnail,term_titles,subject_titles,classification_titles,style_titles" }));
       const base = d.config?.iiif_url || "https://www.artic.edu/iiif/2";
       return d.data.filter(a => a.image_id).map(a => {
         const tw = a.thumbnail?.width, th = a.thumbnail?.height;
         const at = w => ({ w, h: tw ? Math.round(th * w / tw) : 0 });
         return {
           uid: "aic-" + a.id, source: "artic", type: "image", title: a.title,
+          tags: [...(a.subject_titles || []), ...(a.term_titles || []), ...(a.classification_titles || []), ...(a.style_titles || [])].join(", "), desc: a.thumbnail?.alt_text || "",
           thumb: `${base}/${a.image_id}/full/400,/0/default.jpg`, w: tw, h: th,
           author: (a.artist_display || "").split("\n")[0], page: "https://www.artic.edu/artworks/" + a.id, license: "CC0 (public domain)",
           variants: [
@@ -148,6 +154,7 @@ export const SOURCES = {
         if (im.full) vs.push({ label: "Full TIFF", url: im.full.url, w: +im.full.width, h: +im.full.height });
         return {
           uid: "cma-" + a.id, source: "cleveland", type: "image", title: a.title, thumb: im.web.url,
+          tags: [a.type, a.technique, a.department, ...(a.culture || [])].filter(Boolean).join(", "), desc: strip(a.description || a.digital_description || "").slice(0, 400),
           w: +im.web.width, h: +im.web.height, author: a.creators?.[0]?.description || "", page: a.url, license: "CC0 (public domain)", variants: vs
         };
       });
@@ -162,7 +169,8 @@ export const SOURCES = {
         for (const p of d.photos) {
           const s = p.src, r = p.height / p.width;
           out.push({
-            uid: "px-" + p.id, source: "pexels", type: "image", title: p.alt || q, thumb: s.medium, w: p.width, h: p.height,
+            uid: "px-" + p.id, source: "pexels", type: "image", title: p.alt || slugWords(p.url) || "Untitled photo", thumb: s.medium, w: p.width, h: p.height,
+            tags: slugWords(p.url), desc: "",
             author: p.photographer, authorUrl: p.photographer_url, page: p.url, license: "Pexels License (free, no attribution required)",
             credit: `Photo by ${p.photographer} on Pexels`,
             variants: [
@@ -178,7 +186,7 @@ export const SOURCES = {
         for (const v of d.videos) {
           const files = v.video_files.filter(f => f.link && f.width).sort((a, b) => a.width - b.width);
           out.push({
-            uid: "pxv-" + v.id, source: "pexels", type: "video", title: (v.url.match(/video\/([^/]+?)-\d+\/?$/)?.[1] || q).replace(/-/g, " "),
+            uid: "pxv-" + v.id, source: "pexels", type: "video", title: slugWords(v.url) || "Untitled video", tags: slugWords(v.url), desc: "",
             thumb: v.image, preview: (files.find(f => f.width >= 480) || files[0])?.link, w: v.width, h: v.height,
             author: v.user?.name, authorUrl: v.user?.url, page: v.url, license: "Pexels License (free, no attribution required)",
             credit: `Video by ${v.user?.name} on Pexels`,
@@ -196,7 +204,7 @@ export const SOURCES = {
       if (type !== "video") {
         const d = await getJSON("https://pixabay.com/api/?" + qs({ key: keys.pixabay, q, page, per_page: type === "all" ? 12 : 24, safesearch: "true" }));
         for (const h of d.hits) out.push({
-          uid: "pb-" + h.id, source: "pixabay", type: "image", title: h.tags || q, thumb: h.webformatURL, w: h.imageWidth, h: h.imageHeight,
+          uid: "pb-" + h.id, source: "pixabay", type: "image", title: h.tags || "Untitled", tags: h.tags || "", desc: "", thumb: h.webformatURL, w: h.imageWidth, h: h.imageHeight,
           author: h.user, authorUrl: `https://pixabay.com/users/${h.user}-${h.user_id}/`, page: h.pageURL, license: "Pixabay Content License",
           credit: `Image by ${h.user} from Pixabay`,
           variants: [
@@ -212,9 +220,9 @@ export const SOURCES = {
           const V = h.videos || {};
           const vs = ["tiny", "small", "medium", "large"].filter(k => V[k]?.url).map(k => ({ label: k[0].toUpperCase() + k.slice(1) + " " + V[k].height + "p", url: V[k].url, w: V[k].width, h: V[k].height }));
           out.push({
-            uid: "pbv-" + h.id, source: "pixabay", type: "video", title: h.tags || q,
+            uid: "pbv-" + h.id, source: "pixabay", type: "video", title: h.tags || "Untitled", tags: h.tags || "", desc: "",
             thumb: V.medium?.thumbnail || V.small?.thumbnail || V.tiny?.thumbnail || (h.picture_id ? `https://i.vimeocdn.com/video/${h.picture_id}_640x360.jpg` : ""),
-            preview: (V.tiny || V.small)?.url, w: vs.at(-1)?.w, h: vs.at(-1)?.h,
+            preview: (V.tiny || V.small)?.url, w: vs[vs.length - 1]?.w, h: vs[vs.length - 1]?.h,
             author: h.user, authorUrl: `https://pixabay.com/users/${h.user}-${h.user_id}/`, page: h.pageURL, license: "Pixabay Content License",
             credit: `Video by ${h.user} from Pixabay`, variants: vs
           });
@@ -228,7 +236,7 @@ export const SOURCES = {
     desc: "Free films, documentaries and stock footage you can download. Only Creative Commons and public-domain items are shown.",
     async search(q, type, page) {
       const query = `(${q}) AND mediatype:(movies) AND (licenseurl:*creativecommons* OR licenseurl:*publicdomain*)`;
-      const url = "https://archive.org/advancedsearch.php?" + qs({ q: query, rows: 20, page, output: "json" }) + "&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=licenseurl";
+      const url = "https://archive.org/advancedsearch.php?" + qs({ q: query, rows: 20, page, output: "json" }) + "&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=licenseurl&fl[]=subject&fl[]=description";
       const d = await getJSON(url);
       return (d.response?.docs || []).map(doc => {
         const id = doc.identifier;
@@ -237,6 +245,7 @@ export const SOURCES = {
         const license = /publicdomain/i.test(lu) ? (/zero/i.test(lu) ? "CC0" : "Public domain") : m ? "CC " + m[1].toUpperCase() : "Creative Commons";
         return {
           uid: "ia-" + id, source: "archive", type: "video", title: [].concat(doc.title || id)[0],
+          tags: [].concat(doc.subject || []).join(", "), desc: strip([].concat(doc.description || "")[0]).slice(0, 400),
           thumb: "https://archive.org/services/img/" + encodeURIComponent(id),
           author: [].concat(doc.creator || "")[0], page: "https://archive.org/details/" + encodeURIComponent(id), license,
           variants: null,
@@ -270,6 +279,7 @@ export const SOURCES = {
         const s = v.snippet, th = s.thumbnails?.high || s.thumbnails?.medium || s.thumbnails?.default || {};
         return {
           uid: "yt-" + v.id.videoId, source: "youtube", type: "video", title: strip(s.title), thumb: th.url, w: th.width, h: th.height,
+          tags: "", desc: strip(s.description || "").slice(0, 300),
           author: s.channelTitle, authorUrl: "https://www.youtube.com/channel/" + s.channelId,
           page: "https://www.youtube.com/watch?v=" + v.id.videoId, license: "CC BY (YouTube Creative Commons)",
           credit: `“${strip(s.title)}” by ${s.channelTitle} on YouTube, licensed CC BY`, watchOnly: true, variants: []
@@ -285,7 +295,8 @@ export const SOURCES = {
         const u = p.urls, r = p.height / p.width, utm = "?utm_source=creator_downloader_mobile&utm_medium=referral";
         const sized = w => ({ label: w + " px", url: u.raw + "&w=" + w + "&q=85&fm=jpg", w, h: Math.round(w * r) });
         return {
-          uid: "us-" + p.id, source: "unsplash", type: "image", title: p.alt_description || p.description || q, thumb: u.small, w: p.width, h: p.height,
+          uid: "us-" + p.id, source: "unsplash", type: "image", title: p.alt_description || p.description || "Untitled photo", thumb: u.small, w: p.width, h: p.height,
+          tags: (p.tags || []).map(t => t.title).join(", "), desc: p.description || "",
           author: p.user?.name, authorUrl: p.user?.links?.html + utm, page: p.links.html + utm, license: "Unsplash License (free to use)",
           credit: `Photo by ${p.user?.name} on Unsplash`,
           variants: [sized(800), sized(1600), sized(2560), { label: "Original", url: u.full, w: p.width, h: p.height }],

@@ -26,7 +26,9 @@ const store = {
 const DEFAULTS = {
   profile: { name: "Creator", hero: "volt" },
   downloader: { quality: "large", fx: true, sound: true },
-  search: { type: "all", lic: "all" }, enabled: null, pinterest: true
+  search: { type: "all", lic: "all" }, enabled: null, pinterest: true,
+  check: { ai: true, strict: "normal", hideWeak: true },
+  auto: { on: false, count: 5, videos: false }
 };
 let webJobs = store.get("jobs", []);
 const saveJobs = () => store.set("jobs", webJobs.slice(0, 300));
@@ -82,19 +84,22 @@ export const cd = {
   onDownload: fn => { listeners.dl.add(fn); return () => listeners.dl.delete(fn); },
   onPinSaved: fn => { listeners.pin.add(fn); return () => listeners.pin.delete(fn); },
   getSettings: async () => {
-    if (NATIVE) { const r = await call("getSettings"); return { settings: deep(structuredClone(DEFAULTS), r?.settings || {}), keys: r?.keys || {}, version: r?.version || "" }; }
-    return { settings: deep(structuredClone(DEFAULTS), store.get("settings", {})), keys: store.get("keys", {}), version: "web" };
+    if (NATIVE) { const r = await call("getSettings"); return { settings: deep(JSON.parse(JSON.stringify(DEFAULTS)), r?.settings || {}), keys: r?.keys || {}, version: r?.version || "" }; }
+    return { settings: deep(JSON.parse(JSON.stringify(DEFAULTS)), store.get("settings", {})), keys: store.get("keys", {}), version: "web" };
   },
   setSettings: async (patch, keys) => {
-    if (NATIVE) { const r = await call("setSettings", patch || null, keys || null); return { settings: deep(structuredClone(DEFAULTS), r?.settings || {}), keys: r?.keys || {} }; }
+    if (NATIVE) { const r = await call("setSettings", patch || null, keys || null); return { settings: deep(JSON.parse(JSON.stringify(DEFAULTS)), r?.settings || {}), keys: r?.keys || {} }; }
     const s = deep(store.get("settings", {}), patch || {}); store.set("settings", s);
     const k = store.get("keys", {}); for (const [n, v] of Object.entries(keys || {})) { if (String(v || "").trim()) k[n] = String(v).trim(); else delete k[n]; } store.set("keys", k);
-    return { settings: deep(structuredClone(DEFAULTS), s), keys: k };
+    return { settings: deep(JSON.parse(JSON.stringify(DEFAULTS)), s), keys: k };
   },
   external: url => NATIVE ? call("external", url) : window.open(url, "_blank", "noopener"),
-  // Pinterest: native app opens its own Pinterest screen (you sign in there, long-press to save); web opens a tab.
-  pinOpen: ({ query, subdir = null, need = 0, label = "" }) => NATIVE ? call("pinOpen", { query, subdir, need, label })
-    : window.open("https://www.pinterest.com/search/pins/?q=" + encodeURIComponent(query || ""), "_blank", "noopener"),
+  // Pinterest panel (Android app): a native view laid over the rectangle the interface reserves.
+  pinShow: o => NATIVE ? call("pinShow", o) : null,
+  pinLayout: rect => NATIVE ? call("pinLayout", rect) : null,
+  pinHide: () => NATIVE ? call("pinHide") : null,
+  pinNav: what => NATIVE ? call("pinNav", what) : null,
+  pinOpenTab: query => window.open("https://www.pinterest.com/search/pins/?q=" + encodeURIComponent(query || ""), "_blank", "noopener"),
   pinSignOut: () => NATIVE && call("pinSignOut"),
   bulkCredits: (subdir, text) => NATIVE ? call("bulkCredits", subdir, text) : null
 };

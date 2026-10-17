@@ -9,6 +9,7 @@
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="stylesheet" href="styles.css">
+<script src="polyfill.js"></script>
 </head>
 <body>
 <header class="top">
@@ -38,14 +39,21 @@
 
 <!-- SEARCH -->
 <main class="view" id="v-search" hidden>
+  <div class="srctabs" id="srcTabs" role="tablist">
+    <button type="button" role="tab" data-tab="libs" aria-selected="true">Free libraries</button>
+    <button type="button" role="tab" data-tab="pin" aria-selected="false" class="pintab">Pinterest</button>
+  </div>
   <div class="filters">
     <div class="seg" id="typeSeg"><button type="button" data-v="all" aria-pressed="true">All</button><button type="button" data-v="image" aria-pressed="false">Images</button><button type="button" data-v="video" aria-pressed="false">Videos</button></div>
     <select id="lic" aria-label="License"><option value="all">All free</option><option value="commercial">Commercial OK</option><option value="nocredit">No credit</option></select>
     <select id="pref" aria-label="1-tap quality"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option><option value="original">Original</option></select>
+    <button type="button" class="chip autochip" id="autoChip" aria-pressed="false">⚡ Auto</button>
   </div>
   <div class="reshead"><h1 id="heading">Search</h1><p id="summary"></p></div>
-  <button class="pinbtn" id="pinSearch" type="button" hidden>Search “<span></span>” on Pinterest</button>
+  <div class="checkbar" id="checkBar" hidden><i></i><span></span></div>
+  <div class="autostrip" id="autoStrip" hidden></div>
   <div class="grid" id="grid"></div>
+  <button class="chip weak" id="weakToggle" type="button" hidden></button>
   <div class="more"><button class="cta" id="moreBtn" type="button" hidden>Load more</button></div>
 </main>
 
@@ -63,6 +71,7 @@
       <label><span>Best per line</span><select id="bCount"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
       <label><span>Pinterest picks</span><select id="bPin"><option value="0">None</option><option>1</option><option>2</option><option selected>3</option></select></label>
       <label><span>Shape</span><select id="bShape"><option value="any">Any</option><option value="landscape">Landscape</option><option value="portrait" selected>Portrait</option><option value="square">Square</option></select></label>
+      <label><span>Media</span><select id="bMedia"><option value="image" selected>Images</option><option value="video">Videos</option><option value="both">Both</option></select></label>
       <label><span>License</span><select id="bLic"><option value="all">All free</option><option value="commercial">Commercial OK</option><option value="nocredit">No credit</option></select></label>
     </div>
     <label class="check"><input type="checkbox" class="toggle" id="bSkip" checked> Skip repeated lines</label>
@@ -103,6 +112,11 @@
   <button data-v="downloads"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m6.5 10 5.5 5.5 5.5-5.5"/><path d="M4 20h16"/></svg>Downloads<span class="badge" id="dlBadge" hidden>0</span></button>
   <button data-v="profile"><span class="av" id="avatarMini"></span>Profile</button>
 </nav>
+
+<div class="pinarea" id="pinArea" hidden>
+  <div class="pinbar" id="pinBar"></div>
+  <div class="pinslot" id="pinSlot"><p>Loading Pinterest…</p></div>
+</div>
 
 <div class="sheet" id="sheet" hidden><div class="sheetbg" data-close></div><div class="sheetbody" id="sheetBody"></div></div>
 <div id="toasts"></div>

@@ -5,3 +5,4 @@ android/app/src/main/assets/www/
 android/local.properties
 *.apk
 build.log
+www/vendor/
