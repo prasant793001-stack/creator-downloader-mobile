@@ -14,5 +14,5 @@ jobs:
         with:
           node-version: "22"
       - run: |
-          mkdir -p /tmp/d && cp ci/diag.mjs /tmp/d/ && cd /tmp/d && npm init -y >/dev/null && npm i @huggingface/transformers@4.3.0 >/dev/null && node diag.mjs
+          mkdir -p /tmp/d && cp ci/calibrate.mjs /tmp/d/ && cd /tmp/d && npm init -y >/dev/null && npm i @huggingface/transformers@4.3.0 >/dev/null && node calibrate.mjs && mkdir -p out && cp ci-out-cal/calibration.txt out/diag.txt && gzip -c ci-out-cal/rows.json > out/rows.json.gz
           cd out && git init -q -b ci-diag && git config user.name CI && git config user.email ci@users.noreply.github.com && git add -A && git commit -qm diag && git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-diag
