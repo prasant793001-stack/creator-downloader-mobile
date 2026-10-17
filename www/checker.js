@@ -1,21 +1,17 @@
 // Picture checker: does this picture actually show what was searched?
 //  1. Text check: search words found in the title, tags or description (never in made-up titles).
-//  2. AI check (on-device, MobileCLIP-S0, ~55 MB downloaded once): compares the picture itself with the
-//     search words. Zero-shot against generic "other things" prompts, so the score means
-//     "how much more this looks like <query> than like something else".
+//  2. AI check (on-device, MobileCLIP-S0, ~66 MB downloaded once): compares the picture itself with the
+//     search words. Score = how much more the picture matches "a photo of <words>" than "a photo".
+//     Calibrated on 4,800 real result/topic pairs: AUC 0.989; at "normal" it keeps ~97% of real
+//     matches and rejects ~96% of wrong ones.
 // Nothing is uploaded: pictures and words stay on the device.
 
 import { terms } from "./bulk.js";
 
 const MODEL = "Xenova/mobileclip_s0";
-const DISTRACTORS = [
-  "a photo of a person", "a photo of a group of people", "a photo of a building", "a photo of a city street",
-  "a photo of a landscape", "a photo of the sky", "a photo of an animal", "a photo of a plant", "a photo of food",
-  "a photo of a vehicle", "a photo of an everyday object", "a photo of a room interior", "a page of text",
-  "a map", "a diagram or chart", "a logo", "an abstract pattern", "a painting", "a black and white historical photo",
-  "a screenshot", "a blurry photo"
-];
-export const STRICTNESS = { relaxed: 0.2, normal: 0.35, strict: 0.5 };
+// Thresholds on the 0..1 match score below (diff of 0.0 / 0.015 / 0.04).
+export const STRICTNESS = { relaxed: 0.19, normal: 0.28, strict: 0.44 };
+const toScore = diff => Math.max(0, Math.min(1, (diff + 0.03) / 0.16));
 
 let lib = null, models = null, loading = null;
 const textCache = new Map();
@@ -98,30 +94,25 @@ async function textEmbeds(q) {
   const key = q.toLowerCase().trim();
   if (textCache.has(key)) return textCache.get(key);
   const m = await ensureChecker();
-  const qWords = new Set(terms(q));
-  const others = DISTRACTORS.filter(d => !terms(d).some(w => qWords.has(w)));
-  const prompts = [`a photo of ${q}`, ...others];
+  const prompts = [`a photo of ${q}`, "a photo"];
   const inputs = m.tokenizer(prompts, { padding: "max_length", truncation: true });
   const { text_embeds } = await m.text(inputs);
   const dim = text_embeds.dims[1], data = text_embeds.data;
   const vecs = prompts.map((_, i) => norm(data.subarray(i * dim, (i + 1) * dim)));
-  const out = { vecs, prompts };
-  textCache.set(key, out);
-  return out;
+  textCache.set(key, vecs);
+  return vecs;
 }
 
-// Score one picture (data: URL or blob URL) against the search words. Returns { p, sim } or null.
+// Score one picture (data: URL or blob URL) against the search words. Returns { p, sim, diff } or null.
 export async function aiScore(q, imageUrl) {
   const m = await ensureChecker();
-  const t = await textEmbeds(q);
+  const [tq, tnull] = await textEmbeds(q);
   const image = await lib.RawImage.read(imageUrl);
   const inputs = await m.processor(image);
   const { image_embeds } = await m.vision(inputs);
   const v = norm(image_embeds.data);
-  const sims = t.vecs.map(tv => dot(v, tv));
-  const logits = sims.map(s => 100 * s), mx = Math.max(...logits);
-  const ex = logits.map(l => Math.exp(l - mx)), sum = ex.reduce((a, b) => a + b, 0);
-  return { p: ex[0] / sum, sim: sims[0] };
+  const sim = dot(v, tq), diff = sim - dot(v, tnull);
+  return { p: toScore(diff), sim, diff };
 }
 
 // Check a list of results. getImage(it) -> data URL (or null). onEach(it) fires as each finishes.

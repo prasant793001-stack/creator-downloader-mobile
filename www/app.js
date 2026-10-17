@@ -491,7 +491,7 @@ function pConn() {
 function pDl() {
   const d = cfg.downloader, c = cfg.check, a = cfg.auto, o = (v, cur, l) => `<option value="${v}" ${String(cur) === String(v) ? "selected" : ""}>${l}</option>`;
   const st = checkerStatus();
-  const model = st.state === "ready" ? "Ready on this phone" : st.state === "loading" ? `Downloading ${fmtBytes(st.loaded)} of ${fmtBytes(st.total || 55e6)}` : st.state === "error" ? "Couldn't load: " + st.error : "Not downloaded yet (about 55 MB, once)";
+  const model = st.state === "ready" ? "Ready on this phone" : st.state === "loading" ? `Downloading ${fmtBytes(st.loaded)} of ${fmtBytes(st.total || 66e6)}` : st.state === "error" ? "Couldn't load: " + st.error : "Not downloaded yet (about 66 MB, once)";
   $("#ppage").innerHTML = `<div class="box"><h3>Picture checker</h3>
     <div class="prow"><label class="lbl" for="cAi">AI picture check <input type="checkbox" class="toggle" id="cAi" ${c.ai !== false ? "checked" : ""}></label>
       <div class="help">Looks at each picture and scores how well it shows your search words. Runs on this phone; nothing is uploaded.</div>
@@ -509,7 +509,7 @@ function pDl() {
   const off = onCheckerStatus(s => {
     if (page !== "downloader" || view !== "profile") return off();
     const ms = $("#modelState"); if (!ms) return;
-    ms.textContent = s.state === "ready" ? "Ready on this phone" : s.state === "loading" ? `Downloading ${fmtBytes(s.loaded)} of ${fmtBytes(s.total || 55e6)}` : s.state === "error" ? "Couldn't load: " + s.error : "";
+    ms.textContent = s.state === "ready" ? "Ready on this phone" : s.state === "loading" ? `Downloading ${fmtBytes(s.loaded)} of ${fmtBytes(s.total || 66e6)}` : s.state === "error" ? "Couldn't load: " + s.error : "";
     $("#modelBar").hidden = s.state !== "loading"; $("#modelBar i").style.width = (s.total ? 100 * s.loaded / s.total : 5) + "%";
     $("#modelGet").hidden = s.state === "ready" || s.state === "loading";
   });
