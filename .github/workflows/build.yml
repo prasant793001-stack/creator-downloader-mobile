@@ -123,22 +123,21 @@ jobs:
           name: test-android
           path: ci-out
 
-  web:
-    name: Publish web version
+  report:
+    name: Publish test results
+    needs: [test-web, test-android]
+    if: always()
     runs-on: ubuntu-latest
-    continue-on-error: true
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - name: Fetch the AI runtime
-        run: bash ci/vendor.sh
-      - uses: actions/configure-pages@v5
+      - uses: actions/download-artifact@v4
         with:
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: www
-      - id: deploy
-        uses: actions/deploy-pages@v4
+          pattern: test-*
+          path: results
+      - name: Push results to the ci-results branch
+        run: |
+          mkdir -p results && cd results
+          echo "${GITHUB_SHA}" > COMMIT
+          git init -q -b ci-results
+          git config user.name "CI" && git config user.email "ci@users.noreply.github.com"
+          git add -A && git commit -qm "Test results for ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-results
