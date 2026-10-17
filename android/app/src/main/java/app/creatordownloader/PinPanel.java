@@ -50,22 +50,10 @@ final class PinPanel {
         s.setUserAgentString(s.getUserAgentString().replace("; wv", "").replaceAll("Version/\\d+\\.\\d+ ", ""));
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true);
-        web.setWebViewClient(new WebViewClient() {
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
-                Uri u = req.getUrl();
-                String scheme = u.getScheme() == null ? "" : u.getScheme();
-                String h = u.getHost() == null ? "" : u.getHost();
-                if (scheme.startsWith("http") && PIN_HOSTS.matcher(h).find()) return false;
-                if ("https".equals(scheme)) act.openExternal(u.toString()); // links to other websites
-                return true; // never hand over to the Pinterest app or other apps
-            }
-
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                CookieManager.getInstance().flush();
-            }
-        });
+        s.setSupportMultipleWindows(true);            // sign-in pop-ups open inside the panel too
+        s.setJavaScriptCanOpenWindowsAutomatically(true);
+        web.setWebViewClient(client());
+        web.setWebChromeClient(chrome());
         web.setOnLongClickListener(v -> {
             WebView.HitTestResult r = web.getHitTestResult();
             int t = r.getType();
@@ -82,6 +70,70 @@ final class PinPanel {
         });
         web.setVisibility(View.GONE);
         root.addView(web, new FrameLayout.LayoutParams(1, 1));
+    }
+
+    private WebView popup;
+
+    /** Everything stays inside the panel: Pinterest, its sign-in pages and any site a pin links to.
+     *  Nothing is handed to Chrome or to other apps. */
+    private WebViewClient client() {
+        return new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
+                Uri u = req.getUrl();
+                String scheme = u.getScheme() == null ? "" : u.getScheme().toLowerCase();
+                if (scheme.equals("http") || scheme.equals("https")) return false;
+                if (scheme.equals("intent")) {  // "open in app" links: use their web address instead
+                    try {
+                        String fb = android.content.Intent.parseUri(u.toString(), android.content.Intent.URI_INTENT_SCHEME).getStringExtra("browser_fallback_url");
+                        if (fb != null && fb.startsWith("https://")) view.loadUrl(fb);
+                    } catch (Exception ignored) { }
+                }
+                return true; // never leave the app
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                CookieManager.getInstance().flush();
+            }
+        };
+    }
+
+    private android.webkit.WebChromeClient chrome() {
+        return new android.webkit.WebChromeClient() {
+            @Override
+            public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
+                closePopup();
+                popup = new WebView(act);
+                popup.setBackgroundColor(0xFFFFFFFF);
+                WebSettings ps = popup.getSettings();
+                ps.setJavaScriptEnabled(true);
+                ps.setDomStorageEnabled(true);
+                ps.setSupportMultipleWindows(true);
+                ps.setJavaScriptCanOpenWindowsAutomatically(true);
+                ps.setUserAgentString(web.getSettings().getUserAgentString());
+                CookieManager.getInstance().setAcceptThirdPartyCookies(popup, true);
+                popup.setWebViewClient(client());
+                popup.setWebChromeClient(this);
+                root.addView(popup, web.getLayoutParams());
+                popup.bringToFront();
+                ((WebView.WebViewTransport) resultMsg.obj).setWebView(popup);
+                resultMsg.sendToTarget();
+                return true;
+            }
+
+            @Override
+            public void onCloseWindow(WebView w) {
+                closePopup();
+            }
+        };
+    }
+
+    private void closePopup() {
+        if (popup == null) return;
+        root.removeView(popup);
+        popup.destroy();
+        popup = null;
     }
 
     /** o = { query, rect:{x,y,w,h} (CSS px), subdir:[..]|null, need, label } */
@@ -112,9 +164,11 @@ final class PinPanel {
         lp.leftMargin = Math.round((float) r.optDouble("x", 0) * d);
         lp.topMargin = Math.round((float) r.optDouble("y", 0) * d);
         web.setLayoutParams(lp);
+        if (popup != null) popup.setLayoutParams(new FrameLayout.LayoutParams(lp));
     }
 
     void hide() {
+        closePopup();
         if (web != null) web.setVisibility(View.GONE);
     }
 
@@ -124,7 +178,8 @@ final class PinPanel {
 
     void nav(String a) {
         if (web == null) return;
-        if ("back".equals(a) && web.canGoBack()) web.goBack();
+        if ("back".equals(a) && popup != null) { if (popup.canGoBack()) popup.goBack(); else closePopup(); }
+        else if ("back".equals(a) && web.canGoBack()) web.goBack();
         else if ("forward".equals(a) && web.canGoForward()) web.goForward();
         else if ("reload".equals(a)) web.reload();
         else if ("home".equals(a)) { query = null; web.loadUrl("https://www.pinterest.com/"); }
@@ -133,6 +188,7 @@ final class PinPanel {
     /** Android back button: go back inside Pinterest, else close the panel. */
     boolean back() {
         if (!shown()) return false;
+        if (popup != null) { if (popup.canGoBack()) popup.goBack(); else closePopup(); return true; }
         if (web.canGoBack()) { web.goBack(); return true; }
         hide();
         event(new JSONObject(), "closed");

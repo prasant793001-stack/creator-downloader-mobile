@@ -40,9 +40,21 @@ $("#goHome").onclick = () => show("home");
 
 /* ---------------- picture cache for checks ---------------- */
 const imgCache = new Map();
+// The picture as a data URL, for the checker. First through the app (no browser limits); if a site
+// refuses that, load it like a normal web picture and copy its pixels.
+function viaImg(url) {
+  return new Promise(res => {
+    const img = new Image(); img.crossOrigin = "anonymous"; img.referrerPolicy = "no-referrer";
+    const t = setTimeout(() => res(null), 15000);
+    img.onload = () => { clearTimeout(t); try { const W = Math.min(400, img.naturalWidth || 400), H = Math.max(1, Math.round(W * (img.naturalHeight || 1) / (img.naturalWidth || 1))); const c = document.createElement("canvas"); c.width = W; c.height = H; c.getContext("2d").drawImage(img, 0, 0, W, H); res(c.toDataURL("image/jpeg", 0.9)); } catch { res(null); } };
+    img.onerror = () => { clearTimeout(t); res(null); };
+    img.src = url;
+  });
+}
 async function getImage(it) {
   if (imgCache.has(it.uid)) return imgCache.get(it.uid);
-  const p = cd.thumb(https(it.thumb)).catch(() => null);
+  const url = https(it.thumb);
+  const p = cd.thumb(url).catch(() => null).then(d => d || viaImg(url));
   imgCache.set(it.uid, p);
   return p;
 }
@@ -58,6 +70,7 @@ function badge(it) {
   const c = it.check;
   if (!c || c.q !== state.q) return state.checking && !it.watchOnly ? '<span class="mbadge wait">…</span>' : "";
   const pct = Math.round(100 * (c.ai != null ? c.ai : c.text));
+  if (c.unchecked) return '<span class="mbadge bad">✗ not checked</span>';
   return `<span class="mbadge ${c.ok ? "ok" : "bad"}">${c.ok ? "✓" : "✗"} ${it.junk ? "logo/text" : pct + "%"}${c.ai == null ? " words" : ""}</span>`;
 }
 function cardHTML(it, i, pre = "") {
@@ -378,7 +391,12 @@ async function bulkOne(r, opts) {
   const media = opts.media === "both" ? ["image", "video"] : [opts.media];
   const ids = Object.keys(SOURCES).filter(id => enabledSet().has(id) && keyOK(id) && !SOURCES[id].watchOnly && SOURCES[id].types.some(t => media.includes(t)));
   const stype = media.length > 1 ? "all" : media[0];
-  const res = await Promise.allSettled(ids.map(id => SOURCES[id].search(r.q, stype, 1)));
+  let res = await Promise.allSettled(ids.map(id => SOURCES[id].search(r.q, stype, 1)));
+  // Libraries sometimes refuse quick repeat searches: wait a moment and ask the failed ones again.
+  if (res.some(x => x.status === "rejected")) {
+    r.msg = "Retrying libraries…"; renderBulk(); await sleep(2500);
+    res = await Promise.all(res.map(async (x, k) => x.status === "fulfilled" ? x : (await Promise.allSettled([SOURCES[ids[k]].search(r.q, stype, 1)]))[0]));
+  }
   const items = res.flatMap(x => x.status === "fulfilled" ? x.value : []).filter(it => media.includes(it.type) && it.thumb && !it.watchOnly);
   items.forEach(it => it.lic = licClass(it.license));
   if (!items.length) {
@@ -393,9 +411,9 @@ async function bulkOne(r, opts) {
     analyze,
     check: list => checkItems(r.q, list, { ...checkOpts(), onEach: () => { n++; r.msg = `Checking pictures ${n}/${list.length}…`; renderBulk(); } })
   });
-  if (!picks.length) { r.state = "fail"; r.msg = `No good matches (${rejected} of ${checked} rejected)`; return; }
+  if (!picks.length) { r.state = "fail"; r.msg = `No real match in the free libraries (${rejected} of ${checked} pictures rejected). Use the Pinterest step for this line.`; return; }
   const pairs = [], credits = [];
-  for (const x of picks) { try { const v = pick(await ensureVariants(x.it), cfg.downloader.quality || "large"); if (v) { pairs.push([x.it, v]); r.picks.push({ thumb: x.it.thumb }); credits.push(`${pairs.length}. ${x.it.title} | match ${Math.round(100 * (x.it.check?.ai ?? x.it.check?.text ?? 0))}% | ${x.it.author || "unknown"} | ${SOURCES[x.it.source].name} | ${x.it.license} | ${x.it.page}`); } } catch {} }
+  for (const x of picks) { try { const v = pick(await ensureVariants(x.it), cfg.downloader.quality || "large"); if (v) { pairs.push([x.it, v]); r.picks.push({ thumb: x.it.thumb }); (r.pickInfo ||= []).push(`${x.it.source} ai=${x.it.check?.ai == null ? "na" : Math.round(x.it.check.ai * 100)} ${String(x.it.title).slice(0, 40)}`); credits.push(`${pairs.length}. ${x.it.title} | match ${Math.round(100 * (x.it.check?.ai ?? x.it.check?.text ?? 0))}% | ${x.it.author || "unknown"} | ${SOURCES[x.it.source].name} | ${x.it.license} | ${x.it.page}`); } } catch {} }
   if (!pairs.length) { r.state = "fail"; r.msg = "No downloadable files"; return; }
   const sub = subdirOf(r);
   await enqueue(pairs, (it, v, k) => ({ subdir: sub, baseName: `${k + 1} - ${it.title}`, query: r.q, bulk: bulk.project }));
@@ -408,7 +426,7 @@ $("#bStart").onclick = async () => {
   const opts = { count: +$("#bCount").value, shape: $("#bShape").value, lic: $("#bLic").value, media: $("#bMedia").value };
   Object.assign(bulk, { running: true, paused: false, stop: false, started: true });
   $("#bStart").hidden = true; $("#bPause").hidden = $("#bStop").hidden = false; $("#bPinGo").hidden = true;
-  todo.forEach(r => { r.state = "ready"; r.picks = []; r.msg = ""; }); renderBulk();
+  todo.forEach(r => { r.state = "ready"; r.picks = []; r.pickInfo = []; r.msg = ""; }); renderBulk();
   if (cfg.check.ai !== false && checkerStatus().state !== "ready") {
     const off = onCheckerStatus(st => { if (st.state === "loading") prog(0, todo.length, st.total ? `Getting the AI checker ready: ${fmtBytes(st.loaded)} of ${fmtBytes(st.total)} (first time only)` : "Getting the AI checker ready…"); });
     try { await ensureChecker(); } catch { toast("AI checker unavailable. Checking words only."); }
@@ -421,6 +439,7 @@ $("#bStart").onclick = async () => {
     prog(done, todo.length, `Line ${r.i + 1}: ${r.q}`);
     try { await bulkOne(r, opts); } catch (e) { r.state = "fail"; r.msg = e.message; console.error("Bulk line failed", r.q, e); }
     done++; renderBulk();
+    await sleep(800); // be gentle with the free libraries between lines
   }
   const ok = todo.filter(r => r.state === "done").length;
   prog(done, todo.length, bulk.stop ? `Stopped · ${ok} lines` : `Done · ${ok} of ${todo.length} lines`);
@@ -563,7 +582,7 @@ async function selftest(mode) {
     await shot("home");
     const t0 = Date.now();
     if (!light) { try { await ensureChecker(); log("ai ready in", Date.now() - t0, "ms"); } catch (e) { log("ai FAILED", e.message); } }
-    for (const q of light ? ["lighthouse"] : ["red apple", "lighthouse", "sports car"]) {
+    for (const q of light ? ["lighthouse"] : ["red apple", "sports car", "spiderman", "iron man"]) {
       startSearch(q);
       const ok = await waitFor(() => state.q === q && !state.busy && state.checkDone && (lastAuto?.q === q), 240000);
       log("search", q, ok ? "finished" : "TIMEOUT", JSON.stringify(Object.fromEntries(Object.entries(state.status).map(([k, v]) => [k, v.err || v.n]))));
@@ -576,11 +595,12 @@ async function selftest(mode) {
       log("auto jobs", (lastAuto?.ids || []).map(id => { const j = jobs.get(id); return `${j?.status}:${j?.path || j?.error || ""}`; }).join(" | "));
     }
     show("bulk");
-    $("#bText").value = "A lighthouse by the sea at night\nRed roses in the rain\n[Chorus]\nRed roses in the rain";
+    $("#bText").value = light ? "A lighthouse by the sea at night\nRed roses in the rain\n[Chorus]\nRed roses in the rain" : "A lighthouse by the sea at night\nSpiderman\nMarvel\nSuperman\nIron man\nHulk";
     $("#bName").value = "Selftest"; $("#bCount").value = light ? "1" : "2"; $("#bPin").value = "2"; $("#bShape").value = "any";
     $("#bMake").click(); await sleep(400); $("#bStart").click();
     const bok = await waitFor(() => bulk.started && !bulk.running, 420000);
     log("bulk", bok ? "finished" : "TIMEOUT", bulk.rows.map(r => `${r.q}=${r.state}/${r.picks.length}${r.msg ? "(" + r.msg + ")" : ""}`).join(" | "));
+    log("bulk picks", bulk.rows.map(r => r.q + ": " + (r.pickInfo || []).join(" ; ")).join(" || "));
     await shot("bulk");
     await waitFor(() => [...jobs.values()].every(j => !["queued", "downloading"].includes(j.status)), 120000);
     log("all jobs", JSON.stringify([...jobs.values()].reduce((a, j) => (a[j.status] = (a[j.status] || 0) + 1, a), {})), [...jobs.values()].filter(j => j.status === "failed").map(j => j.title + ": " + j.error).slice(0, 5).join(" | "));

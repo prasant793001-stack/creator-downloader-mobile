@@ -17,7 +17,8 @@ import java.util.Set;
 
 /** Network calls made natively, so library APIs work without browser restrictions. */
 final class Net {
-    static final String UA = "CreatorDownloader/1.2 (Android personal app)";
+    static final String UA = "CreatorDownloader/1.3 (Android personal app)";
+    static final String BROWSER_UA = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36";
     private static final Set<String> API_HOSTS = new HashSet<>(Arrays.asList(
             "api.openverse.org", "commons.wikimedia.org", "images-api.nasa.gov", "images-assets.nasa.gov",
             "api.artic.edu", "openaccess-api.clevelandart.org", "api.pexels.com", "pixabay.com",
@@ -106,6 +107,9 @@ final class Net {
     static String thumb(String url) {
         try {
             HttpURLConnection c = open(url, 12000);
+            // Some picture servers (e.g. the Art Institute's) refuse non-browser requests.
+            if (!url.contains("wikimedia.org")) c.setRequestProperty("User-Agent", BROWSER_UA);
+            c.setRequestProperty("Accept", "image/avif,image/webp,image/*,*/*;q=0.8");
             int code = c.getResponseCode();
             String type = c.getContentType();
             if (code != 200 || type == null || !type.startsWith("image/") || type.contains("svg")) return null;

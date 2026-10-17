@@ -22,33 +22,49 @@ export const onCheckerStatus = fn => { listeners.add(fn); return () => listeners
 const emit = () => listeners.forEach(fn => { try { fn({ ...status }); } catch {} });
 
 /* ---------------- text relevance (0..1) ---------------- */
-export function textMatch(it, q) {
+// Strict word matching: same word (after simple plural/ending removal), or a close variant of a long
+// word ("lighthouses"/"lighthouse"). Short fragments never count ("spi" does not match "spiderman").
+function sameWord(w, h) {
+  if (w === h) return true;
+  if (w.length < 5 || h.length < 5) return false;
+  const [a, b] = w.length <= h.length ? [w, h] : [h, w];
+  return b.startsWith(a) && a.length / b.length >= 0.8;
+}
+// Words of a field plus joined neighbours, so "spider man" / "spider-man" also match "spiderman".
+function wordsOf(f) {
+  const t = terms(f), out = new Set(t);
+  for (let i = 0; i + 1 < t.length; i++) out.add(t[i] + t[i + 1]);
+  return [...out];
+}
+// Search words, plus the whole query joined ("iron man" -> also try "ironman").
+function wanted(q) {
   const want = [...new Set(terms(q))];
+  return { want, joined: want.length > 1 ? want.join("") : null };
+}
+const hits = (w, hay) => hay.some(h => sameWord(w, h));
+function fieldShare(q, field) {
+  const { want, joined } = wanted(q);
+  if (!want.length) return 1;
+  const hay = wordsOf(field);
+  if (joined && hits(joined, hay)) return 1;
+  return want.filter(w => hits(w, hay)).length / want.length;
+}
+
+export function textMatch(it, q) {
+  const { want } = wanted(q);
   if (!want.length) return 0.5;
-  const fields = [[it.title, 1], [it.tags, 0.9], [it.desc, 0.4]];
-  let got = 0;
-  for (const w of want) {
-    let best = 0;
-    for (const [f, weight] of fields) {
-      if (!f) continue;
-      const hay = terms(f);
-      if (hay.some(h => h === w || (w.length > 3 && (h.startsWith(w) || w.startsWith(h))))) best = Math.max(best, weight);
-    }
-    got += best;
-  }
-  let s = got / want.length;
-  // phrase bonus: the words appear together in the title or tags
+  let s = 0;
+  for (const [f, weight] of [[it.title, 1], [it.tags, 0.9], [it.desc, 0.4]]) if (f) s = Math.max(s, fieldShare(q, f) * weight);
+  // title + tags together can cover the words between them
+  s = Math.max(s, fieldShare(q, [it.title, it.tags].filter(Boolean).join(" ")) * 0.95);
   const phrase = String(q).toLowerCase().trim();
-  if (phrase.includes(" ") && [it.title, it.tags].some(f => String(f || "").toLowerCase().includes(phrase))) s = Math.min(1, s + 0.15);
+  if (phrase.includes(" ") && [it.title, it.tags].some(f => String(f || "").toLowerCase().includes(phrase))) s = Math.min(1, s + 0.05);
   return s;
 }
 
 // Share of search words found in the title or tags (descriptions don't count here).
 export function strongText(it, q) {
-  const want = [...new Set(terms(q))];
-  if (!want.length) return 1;
-  const hay = terms([it.title, it.tags].filter(Boolean).join(" "));
-  return want.filter(w => hay.some(h => h === w || (w.length > 3 && (h.startsWith(w) || w.startsWith(h))))).length / want.length;
+  return fieldShare(q, [it.title, it.tags].filter(Boolean).join(" "));
 }
 
 /* ---------------- AI model ---------------- */
@@ -132,16 +148,20 @@ export async function checkItems(q, items, { getImage, useAI = true, strictness 
     while (i < items.length) {
       if (signal?.aborted) return;
       const it = items[i++];
-      if (it.check && it.check.q === q && (it.check.ai != null || !aiReady)) { onEach?.(it); continue; }
+      if (it.check && it.check.q === q && (it.check.ai != null || !aiReady) && !it.check.unchecked) { onEach?.(it); continue; }
       const text = textMatch(it, q);
       let ai = null;
       if (aiReady && it.thumb) {
         try { const img = await getImage(it); if (img) { const r = await aiScore(q, img); ai = r.p; it.junk = r.junk; } } catch { ai = null; }
       }
-      // With the AI: mostly what the picture shows. Without: words must clearly match.
-      const score = ai != null ? 0.75 * ai + 0.25 * text : text * 0.8;
-      const ok = ai != null ? !it.junk && (ai >= thr || (ai >= thr * 0.6 && text >= 0.99)) : strongText(it, q) >= 0.99;
-      it.check = { q, text, ai, score, ok };
+      // With the AI: what the picture shows decides. If the AI is on but this picture couldn't be looked
+      // at, it is NOT passed (never download unchecked pictures). Without the AI: every search word
+      // must be in the title or tags.
+      const unchecked = aiReady && ai == null;
+      const score = ai != null ? 0.75 * ai + 0.25 * text : text * 0.6;
+      const ok = ai != null ? !it.junk && (ai >= thr || (ai >= thr * 0.6 && text >= 0.99))
+               : !unchecked && strongText(it, q) >= 0.99;
+      it.check = { q, text, ai, score, ok, unchecked };
       onEach?.(it);
     }
   };
