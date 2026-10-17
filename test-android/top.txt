@@ -1,0 +1,286 @@
+++ seq 1 40
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:55:37'
+== 20:55:37
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+Tasks: 332 total,   2 running, 330 sleeping,   0 stopped,   0 zombie
+  Mem:  4008128K total,  3787788K used,   220340K free,    45980K buffers
+ Swap:  3006092K total,      768K used,  3005324K free,  1966196K cached
+300%cpu  74%user  19%nice 137%sys  48%idle   4%iow   0%irq   0%sirq  19%host
+  PID USER         PR  NI VIRT  RES  SHR S[%CPU] %MEM     TIME+ ARGS
+  492 system       18  -2  15G 405M 299M S 33.3  10.3   0:36.91 system_server
+ 1105 u0_a120      20   0  14G 229M 151M S 25.9   5.8   0:10.51 com.google.android.gms.persistent
+  382 shell        20   0  10G  10M 4.7M S 22.2   0.2   0:00.18 adbd --root_seclabel=u:r:su:s0
+ 5000 shell        20   0  10G 3.5M 2.8M R 18.5   0.0   0:00.02 logcat -v time
+  373 system       -3  -8  11G  34M  21M S 11.1   0.8   0:12.90 surfaceflinger
+ 5004 shell        20   0  10G 4.8M 4.1M R  7.4   0.1   0:00.01 top -b -n 1 -m 8
+ 4807 u0_a120      20   0  13G 148M  98M S  7.4   3.7   0:00.22 com.google.android.gms.ui
+  798 u0_a157      20   0  14G 243M 153M S  7.4   6.2   0:03.94 com.android.systemui
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:55:41'
+== 20:55:41
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+Tasks: 333 total,   1 running, 332 sleeping,   0 stopped,   0 zombie
+  Mem:  4008128K total,  3773480K used,   234648K free,    47572K buffers
+ Swap:  3006092K total,     4608K used,  3001484K free,  1939800K cached
+300%cpu  44%user   7%nice 248%sys  11%idle   0%iow   0%irq   0%sirq  11%host
+  PID USER         PR  NI VIRT  RES  SHR S[%CPU] %MEM     TIME+ ARGS
+ 2772 u0_a120      20   0  13G 189M 119M S  100   4.8   0:03.76 com.google.android.gms.unstable
+ 5010 u0_a174      10 -10  29G 197M 126M S 96.2   5.0   0:04.46 app.creatordownloader.mobile
+ 1362 u0_a120      20   0  14G 222M 142M S 55.5   5.6   0:04.44 com.google.android.gms
+  492 system       18  -2  15G 415M 300M S 11.1  10.6   0:38.11 system_server
+ 1105 u0_a120      20   0  14G 236M 149M S  7.4   6.0   0:12.61 com.google.android.gms.persistent
+ 5225 shell        20   0  10G 4.8M 4.0M R  3.7   0.1   0:00.02 top -b -n 1 -m 8
+  410 mdnsr        20   0  10G 3.3M 2.7M S  3.7   0.0   0:00.02 mdnsd
+   44 root         20   0    0    0    0 I  3.7   0.0   0:00.44 [kworker/2:1-virtio_vsock]
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:55:46'
+== 20:55:46
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+Tasks: 332 total,   3 running, 329 sleeping,   0 stopped,   0 zombie
+  Mem:  4008128K total,  3799848K used,   208280K free,    51284K buffers
+ Swap:  3006092K total,     4608K used,  3001484K free,  1941864K cached
+300%cpu  57%user  64%nice  96%sys   4%idle   0%iow   0%irq   7%sirq  79%host
+  PID USER         PR  NI VIRT  RES  SHR S[%CPU] %MEM     TIME+ ARGS
+ 1105 u0_a120      20   0  14G 247M 166M S 50.0   6.3   0:14.15 com.google.android.gms.persistent
+ 5010 u0_a174      10 -10  29G 201M 127M S 46.4   5.1   0:07.97 app.creatordownloader.mobile
+ 2772 u0_a120      20   0  13G 192M 119M R 35.7   4.9   0:05.49 com.google.android.gms.unstable
+ 1548 u0_a135      20   0  14G 203M 130M S 28.5   5.1   0:04.44 com.google.android.inputmethod.latin
+ 5038 u0_i9000     10 -10 231G 161M 103M S 14.2   4.1   0:00.30 com.google.android.webview:sandboxed_process0:org.chromium.content.app.Sandbo
+   44 root         20   0    0    0    0 I 10.7   0.0   0:00.52 [kworker/2:1-events]
+ 5301 shell        20   0  10G 4.8M 4.0M R  3.5   0.1   0:00.02 top -b -n 1 -m 8
+ 2629 u0_a111      20   0  14G 202M 137M S  3.5   5.1   0:02.19 com.google.android.apps.messaging
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:55:50'
+== 20:55:50
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+Tasks: 332 total,   2 running, 330 sleeping,   0 stopped,   0 zombie
+  Mem:  4008128K total,  3797448K used,   210680K free,    53668K buffers
+ Swap:  3006092K total,     6912K used,  2999180K free,  1944664K cached
+300%cpu  50%user  71%nice 129%sys  14%idle   0%iow   0%irq   7%sirq  57%host
+  PID USER         PR  NI VIRT  RES  SHR S[%CPU] %MEM     TIME+ ARGS
+ 5010 u0_a174      10 -10  29G 202M 127M S 75.0   5.1   0:11.16 app.creatordownloader.mobile
+ 1105 u0_a120      20   0  14G 287M 183M S 39.2   7.3   0:15.55 com.google.android.gms.persistent
+  492 system       18  -2  15G 421M 301M S 28.5  10.7   0:40.09 system_server
+ 1362 u0_a120      20   0  14G 257M 173M S 25.0   6.5   0:05.70 com.google.android.gms
+ 1583 u0_a114      20   0  13G 162M 102M S 10.7   4.1   0:01.47 com.google.android.apps.wellbeing
+   44 root         20   0    0    0    0 I 10.7   0.0   0:00.86 [kworker/2:1-virtio_vsock]
+ 5342 shell        20   0  10G 5.0M 4.2M R  7.1   0.1   0:00.02 top -b -n 1 -m 8
+ 5038 u0_i9000     10 -10 231G 161M 103M S  7.1   4.1   0:00.34 com.google.android.webview:sandboxed_process0:org.chromium.content.app.Sandbo
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:55:54'
+== 20:55:54
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:56:06'
+== 20:56:06
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:56:18'
+== 20:56:18
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:56:30'
+== 20:56:30
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+error: closed
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:56:39'
+== 20:56:39
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:56:43'
+== 20:56:43
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:56:47'
+== 20:56:47
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:56:51'
+== 20:56:51
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:56:55'
+== 20:56:55
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:56:59'
+== 20:56:59
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:57:03'
+== 20:57:03
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:57:07'
+== 20:57:07
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:57:11'
+== 20:57:11
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:57:15'
+== 20:57:15
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:57:19'
+== 20:57:19
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:57:23'
+== 20:57:23
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:57:27'
+== 20:57:27
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:57:31'
+== 20:57:31
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:57:35'
+== 20:57:35
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:57:39'
+== 20:57:39
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:57:43'
+== 20:57:43
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:57:47'
+== 20:57:47
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:57:51'
+== 20:57:51
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:57:55'
+== 20:57:55
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:57:59'
+== 20:57:59
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4
++ for i in $(seq 1 40)
+++ date +%T
++ echo '== 20:58:03'
+== 20:58:03
++ timeout 8 adb shell top -b -n 1 -m 8
++ head -16
+adb: device 'emulator-5554' not found
++ sleep 4

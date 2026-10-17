@@ -1,0 +1,16 @@
+emulator ready at 20:55:13 (job started 20:53:10)
+13
+    versionName=109.0.5414.123
+    versionName=109.0.5414.123
+Performing Streamed Install
+Success
+Starting: Intent { cmp=app.creatordownloader.mobile/app.creatordownloader.MainActivity }
+Status: ok
+LaunchState: COLD
+Activity: app.creatordownloader.mobile/app.creatordownloader.MainActivity
+TotalTime: 628
+WaitTime: 643
+Complete
+20:56:23 plain start shot
+adb: device 'emulator-5554' not found
+20:57:18 tick 1 lines  top: 

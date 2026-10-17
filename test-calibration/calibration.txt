@@ -1,0 +1,30 @@
+topic "red apple": 33 pictures scored
+topic "lighthouse": 35 pictures scored
+topic "cat": 35 pictures scored
+topic "snowy mountain": 35 pictures scored
+topic "sunflower": 35 pictures scored
+topic "sports car": 35 pictures scored
+topic "beach sunset": 35 pictures scored
+topic "bicycle": 35 pictures scored
+topic "coffee cup": 35 pictures scored
+topic "waterfall": 35 pictures scored
+topic "elephant": 33 pictures scored
+wikimedia fail bridge 429 https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=search&gsrnamespace=6&gsrlimit=15&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=400&gsrsearch=bridge%20filetype%3Abitmap
+topic "bridge": 20 pictures scored
+positives 395, negatives 4411
+raw     AUC 0.984 | best threshold 0.1552 keeps 94% of matches, rejects 97% of wrong | pos p10/p50/p90 0.1810/0.2535/0.2926 | neg p50/p90/p99 0.1003/0.1369/0.1768
+diff    AUC 0.989 | best threshold 0.0220 keeps 95% of matches, rejects 98% of wrong | pos p10/p50/p90 0.0479/0.1139/0.1521 | neg p50/p90/p99 -0.0361/-0.0013/0.0355
+broad   AUC 0.980 | best threshold 0.0854 keeps 94% of matches, rejects 96% of wrong | pos p10/p50/p90 0.3173/0.9994/1.0000 | neg p50/p90/p99 0.0005/0.0196/0.4463
+narrow  AUC 0.981 | best threshold 0.6373 keeps 94% of matches, rejects 96% of wrong | pos p10/p50/p90 0.9347/1.0000/1.0000 | neg p50/p90/p99 0.0132/0.2729/0.9592
+  red apple       matches diff p10/p50 0.0192/0.1248 (n=33)
+  lighthouse      matches diff p10/p50 0.1023/0.1353 (n=35)
+  cat             matches diff p10/p50 0.0878/0.1068 (n=35)
+  snowy mountain  matches diff p10/p50 -0.0093/0.0681 (n=35)
+  sunflower       matches diff p10/p50 0.1209/0.1529 (n=33)
+  sports car      matches diff p10/p50 0.0385/0.0863 (n=34)
+  beach sunset    matches diff p10/p50 0.0479/0.1168 (n=35)
+  bicycle         matches diff p10/p50 0.0484/0.0905 (n=35)
+  coffee cup      matches diff p10/p50 0.0770/0.1274 (n=35)
+  waterfall       matches diff p10/p50 0.0933/0.1214 (n=34)
+  elephant        matches diff p10/p50 0.1258/0.1414 (n=31)
+  bridge          matches diff p10/p50 0.0509/0.1108 (n=20)
