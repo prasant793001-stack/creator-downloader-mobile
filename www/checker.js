@@ -76,10 +76,11 @@ export function ensureChecker() {
       const v = Object.values(files);
       status.loaded = v.reduce((a, f) => a + f.loaded, 0); status.total = v.reduce((a, f) => a + f.total, 0); emit();
     };
-    const opts = { dtype: "q8", device: "wasm", progress_callback };
+    // 8-bit text model + 16-bit picture model (~66 MB). The 8-bit picture model is broken (scores at random).
+    const vopts = { dtype: "fp16", device: "wasm", progress_callback }, topts = { dtype: "q8", device: "wasm", progress_callback };
     const [tokenizer, processor] = await Promise.all([AutoTokenizer.from_pretrained(MODEL, { progress_callback }), AutoProcessor.from_pretrained(MODEL, { progress_callback })]);
-    const vision = await CLIPVisionModelWithProjection.from_pretrained(MODEL, opts);
-    const text = await CLIPTextModelWithProjection.from_pretrained(MODEL, opts);
+    const vision = await CLIPVisionModelWithProjection.from_pretrained(MODEL, vopts);
+    const text = await CLIPTextModelWithProjection.from_pretrained(MODEL, topts);
     models = { tokenizer, processor, vision, text };
     status.state = "ready"; emit();
     return models;
