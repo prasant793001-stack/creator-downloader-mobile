@@ -93,11 +93,32 @@ jobs:
           name: test-web
           path: ci-out-web
 
+  calibrate:
+    name: Calibrate picture checker (real results)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run calibration
+        run: |
+          mkdir -p /tmp/cal && cp ci/calibrate.mjs /tmp/cal/ && cd /tmp/cal
+          npm init -y >/dev/null && npm i @huggingface/transformers@4.3.0 >/dev/null
+          node calibrate.mjs
+          mv ci-out-cal "$GITHUB_WORKSPACE/"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-calibration
+          path: ci-out-cal
+
   test-android:
     name: Test on Android emulator (real libraries)
     needs: apk
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -125,7 +146,7 @@ jobs:
 
   report:
     name: Publish test results
-    needs: [test-web, test-android]
+    needs: [test-web, test-android, calibrate]
     if: always()
     runs-on: ubuntu-latest
     steps:

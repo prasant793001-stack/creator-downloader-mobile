@@ -5,7 +5,8 @@ import fs from "node:fs";
 const OUT = "ci-out-web"; fs.mkdirSync(OUT, { recursive: true });
 const srv = spawn("python3", ["-m", "http.server", "8099", "-d", "www"], { stdio: "ignore" });
 await new Promise(r => setTimeout(r, 1500));
-const browser = await chromium.launch();
+// Like the Android app (which fetches pictures natively), let the test read pictures from any site.
+const browser = await chromium.launch({ args: ["--disable-web-security"] });
 const ctx = await browser.newContext({ viewport: { width: 412, height: 900 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, acceptDownloads: true });
 const page = await ctx.newPage();
 const lines = []; let done = false;

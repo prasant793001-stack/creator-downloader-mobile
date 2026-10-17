@@ -29,7 +29,7 @@ const emit = () => listeners.forEach(fn => { try { fn({ ...status }); } catch {}
 export function textMatch(it, q) {
   const want = [...new Set(terms(q))];
   if (!want.length) return 0.5;
-  const fields = [[it.title, 1], [it.tags, 0.9], [it.desc, 0.6]];
+  const fields = [[it.title, 1], [it.tags, 0.9], [it.desc, 0.4]];
   let got = 0;
   for (const w of want) {
     let best = 0;
@@ -45,6 +45,14 @@ export function textMatch(it, q) {
   const phrase = String(q).toLowerCase().trim();
   if (phrase.includes(" ") && [it.title, it.tags].some(f => String(f || "").toLowerCase().includes(phrase))) s = Math.min(1, s + 0.15);
   return s;
+}
+
+// Share of search words found in the title or tags (descriptions don't count here).
+export function strongText(it, q) {
+  const want = [...new Set(terms(q))];
+  if (!want.length) return 1;
+  const hay = terms([it.title, it.tags].filter(Boolean).join(" "));
+  return want.filter(w => hay.some(h => h === w || (w.length > 3 && (h.startsWith(w) || w.startsWith(h))))).length / want.length;
 }
 
 /* ---------------- AI model ---------------- */
@@ -134,7 +142,7 @@ export async function checkItems(q, items, { getImage, useAI = true, strictness 
       }
       // With the AI: mostly what the picture shows. Without: words must clearly match.
       const score = ai != null ? 0.75 * ai + 0.25 * text : text * 0.8;
-      const ok = ai != null ? (ai >= thr || (ai >= thr * 0.6 && text >= 0.99)) : text >= 0.66;
+      const ok = ai != null ? (ai >= thr || (ai >= thr * 0.6 && text >= 0.99)) : strongText(it, q) >= 0.99;
       it.check = { q, text, ai, score, ok };
       onEach?.(it);
     }
