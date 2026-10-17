@@ -15,11 +15,11 @@ for (const it of imgs) { try { it.img = await RawImage.read(it.thumb); raws.push
 log("images", raws.length);
 const norm = v => { let s = 0; for (const x of v) s += x * x; s = Math.sqrt(s) || 1; return Float32Array.from(v, x => x / s); };
 const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; };
-async function run(model, dtype, opts = {}) {
+async function run(model, dtype, opts = {}, vdtype = dtype) {
   const tok = await AutoTokenizer.from_pretrained(model);
   const proc = await AutoProcessor.from_pretrained(model);
   const tm = await CLIPTextModelWithProjection.from_pretrained(model, { dtype, ...opts });
-  const vm = await CLIPVisionModelWithProjection.from_pretrained(model, { dtype, ...opts });
+  const vm = await CLIPVisionModelWithProjection.from_pretrained(model, { dtype: vdtype, ...opts });
   const prompts = TOPICS.map(t => `a photo of ${t}`);
   const ti = tok(prompts, { padding: "max_length", truncation: true });
   const { text_embeds } = await tm(ti);
@@ -37,9 +37,10 @@ async function run(model, dtype, opts = {}) {
     TOPICS.forEach((t, k) => (t === it.topic ? pos : neg).push(sims[k]));
   }
   const avg = a => (a.reduce((x, y) => x + y, 0) / a.length).toFixed(4);
-  log(`${model} ${dtype} ${JSON.stringify(opts)}: top-1 topic accuracy ${(100 * correct / raws.length).toFixed(0)}% | mean sim own ${avg(pos)} other ${avg(neg)} | ${first} | input_ids ${ti.input_ids.dims}`);
+  // separation: share of (own, other) pairs where own > other, per image
+  log(`${model} text=${dtype} vision=${vdtype}: top-1 topic accuracy ${(100 * correct / raws.length).toFixed(0)}% | mean sim own ${avg(pos)} other ${avg(neg)} | ${first} | input_ids ${ti.input_ids.dims}`);
 }
-for (const [m, dt, o] of [["Xenova/mobileclip_s0", "q8", {}], ["Xenova/mobileclip_s0", "fp32", {}], ["Xenova/mobileclip_s0", "fp16", {}], ["Xenova/clip-vit-base-patch32", "q8", {}], ["Xenova/clip-vit-base-patch16", "q8", {}]]) {
-  try { await run(m, dt, o); } catch (e) { log(m, dt, "FAILED", e.message.slice(0, 300)); }
+for (const [dt, vdt] of [["q8", "fp16"], ["fp16", "q8"], ["q4", "fp16"], ["bnb4", "fp16"], ["fp16", "fp16"]]) {
+  try { await run("Xenova/mobileclip_s0", dt, {}, vdt); } catch (e) { log("mobileclip", dt, vdt, "FAILED", e.message.slice(0, 300)); }
 }
 fs.mkdirSync("out", { recursive: true }); fs.writeFileSync("out/diag.txt", out.join("\n"));
