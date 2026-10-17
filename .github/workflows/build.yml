@@ -149,11 +149,16 @@ jobs:
       - name: Run self-test on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
+          api-level: 33
           arch: x86_64
           target: google_apis
+          ram-size: 4096M
+          heap-size: 576M
+          cores: 3
+          disk-size: 4096M
+          force-avd-creation: true
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -memory 4096
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: bash ci/emu-test.sh
       - uses: actions/upload-artifact@v4
         if: always()

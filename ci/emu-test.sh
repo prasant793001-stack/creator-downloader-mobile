@@ -8,6 +8,7 @@ adb shell getprop ro.build.version.release >> "$OUT/timeline.txt"
 adb shell dumpsys package com.google.android.webview | grep -m2 versionName >> "$OUT/timeline.txt"
 adb install -r CreatorDownloader.apk >> "$OUT/timeline.txt" 2>&1 || exit 1
 adb logcat -c
+sleep 20  # let the emulator settle after boot
 adb shell am start -W -n app.creatordownloader.mobile/app.creatordownloader.MainActivity --es selftest native >> "$OUT/timeline.txt" 2>&1
 end=$((SECONDS + 1800)); shots=" "; tick=0
 while [ $SECONDS -lt $end ]; do
