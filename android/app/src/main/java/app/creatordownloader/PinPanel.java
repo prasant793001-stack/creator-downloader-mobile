@@ -183,20 +183,25 @@ final class PinPanel {
         act.runOnUiThread(() -> show(show));
         int want = o.optInt("want", 24);
         JSONObject best = new JSONObject().put("items", new JSONArray()).put("login", false);
-        Thread.sleep(3500);
-        for (int round = 0; round < 10; round++) {
+        Thread.sleep(1500);
+        long until = System.currentTimeMillis() + 40000;
+        int empty = 0;
+        while (System.currentTimeMillis() < until) {
             String raw = evalSync(COLLECT_JS, 5000);
+            int n = 0;
             try {
                 Object v = raw == null ? null : new org.json.JSONTokener(raw).nextValue();
                 if (v instanceof String) {
                     JSONObject r = new JSONObject((String) v);
+                    n = r.optInt("n");
                     if (r.optJSONArray("items") != null && r.getJSONArray("items").length() >= best.getJSONArray("items").length()) best = r;
-                    if (r.optInt("n") >= want) break;
-                    if (r.optBoolean("login") && r.optInt("n") == 0 && round >= 3) break;
+                    if (r.optBoolean("login") && n == 0 && ++empty >= 6) break;
                 }
             } catch (Exception ignored) { }
-            evalSync("window.scrollBy(0, Math.round(window.innerHeight*1.2)); 1", 3000);
-            Thread.sleep(2200);
+            if (n >= want) break;
+            if (n == 0) { Thread.sleep(800); continue; }  // page still loading: just wait
+            evalSync("window.scrollBy(0, Math.round(window.innerHeight*1.5)); 1", 3000);
+            Thread.sleep(1300);
         }
         evalSync("window.scrollTo(0,0); 1", 3000);
         return best;
