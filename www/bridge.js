@@ -10,11 +10,12 @@ window.__cd = {
   resolve(id, json) { const p = pending.get(id); if (!p) return; pending.delete(id); try { p.res(JSON.parse(json)); } catch (e) { p.rej(e); } },
   event(name, json) { let d; try { d = JSON.parse(json); } catch { return; } (listeners[name] || []).forEach(fn => { try { fn(d); } catch {} }); }
 };
+const LONG = { pinScan: 100000 };
 function call(method, ...args) {
   return new Promise((res, rej) => {
     const id = ++seq; pending.set(id, { res, rej });
     try { window.AndroidCD.call(id, method, JSON.stringify(args)); } catch (e) { pending.delete(id); rej(e); }
-    setTimeout(() => { if (pending.has(id)) { pending.delete(id); res(null); } }, 60000);
+    setTimeout(() => { if (pending.has(id)) { pending.delete(id); res(null); } }, LONG[method] || 60000);
   });
 }
 

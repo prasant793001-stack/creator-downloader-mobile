@@ -184,7 +184,7 @@ final class PinPanel {
         int want = o.optInt("want", 24);
         JSONObject best = new JSONObject().put("items", new JSONArray()).put("login", false);
         Thread.sleep(3500);
-        for (int round = 0; round < 6; round++) {
+        for (int round = 0; round < 10; round++) {
             String raw = evalSync(COLLECT_JS, 5000);
             try {
                 Object v = raw == null ? null : new org.json.JSONTokener(raw).nextValue();

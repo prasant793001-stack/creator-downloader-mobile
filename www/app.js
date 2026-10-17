@@ -426,6 +426,9 @@ $("#bStart").onclick = async () => {
   if (bulk.running) return;
   const todo = bulk.rows.filter(r => r.on && r.q); if (!todo.length) return toast("Tick at least one line.");
   const opts = { count: +$("#bCount").value, shape: $("#bShape").value, lic: $("#bLic").value, media: $("#bMedia").value };
+  const pinWanted = +$("#bPin").value;
+  if (!opts.count && !(pinWanted && isNative && cfg.pinterest !== false)) return toast(isNative ? "Set at least one of the two numbers above 0." : "Set the free libraries number above 0 (Pinterest works in the Android app).");
+  saveSettings({ bulk: { count: opts.count, pin: pinWanted } }).catch(() => {});
   Object.assign(bulk, { running: true, paused: false, stop: false, started: true });
   $("#bStart").hidden = true; $("#bPause").hidden = $("#bStop").hidden = false; $("#bPinGo").hidden = true;
   todo.forEach(r => { r.state = "ready"; r.picks = []; r.pickInfo = []; r.msg = ""; }); renderBulk();
@@ -439,6 +442,7 @@ $("#bStart").onclick = async () => {
     while (bulk.paused && !bulk.stop) await sleep(300);
     if (bulk.stop) break;
     prog(done, todo.length, `Line ${r.i + 1}: ${r.q}`);
+    if (!opts.count) { r.state = "ready"; continue; } // free libraries switched off: Pinterest only
     try { await bulkOne(r, opts); } catch (e) { r.state = "fail"; r.msg = e.message; console.error("Bulk line failed", r.q, e); }
     done++; renderBulk();
     await sleep(800); // be gentle with the free libraries between lines
@@ -472,7 +476,7 @@ async function bulkPinAuto(rows, need) {
     pin.open = true; pin.mode = "auto"; document.body.classList.add("pin-open"); $("#pinArea").hidden = false; pinPlace();
     setBar(r, k, "Finding pictures…"); $("#pinSlot").innerHTML = "<p>Loading Pinterest…</p>";
     await new Promise(res => requestAnimationFrame(res));
-    const scan = await cd.pinScan({ query: r.q, rect: pinRect(), want: Math.max(24, need * 8), subdir: subdirOf(r), need, label: r.q }).catch(() => null);
+    const scan = await cd.pinScan({ query: r.q, rect: pinRect(), want: Math.max(24, need * 5), subdir: subdirOf(r), need, label: r.q }).catch(() => null);
     const found = scan?.items || [];
     console.log("ST pin scan", r.q, found.length, scan?.login ? "login-shown" : "", scan?.url || "");
     if (!found.length) {
@@ -688,6 +692,7 @@ async function selftest(mode) {
   await loadSettings();
   state.pref = cfg.downloader.quality || "large"; $("#pref").value = state.pref;
   buildHome(); renderCard(); paintAutoChip();
+  if (cfg.bulk) { if (cfg.bulk.count != null) $("#bCount").value = String(cfg.bulk.count); if (cfg.bulk.pin != null) $("#bPin").value = String(cfg.bulk.pin); }
   $(".pintab").hidden = cfg.pinterest === false;
   (await cd.downloads()).forEach(j => jobs.set(j.id, j)); updateBadge();
   loadPicks();
