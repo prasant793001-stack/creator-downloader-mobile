@@ -5,7 +5,7 @@ const STOP = new Set(("a an the and or but if then so of to in on at by for with
   "i me my mine we us our you your yours he him his she her hers it its they them their this that these those there here what which who whom whose " +
   "do does did doing have has had having will would shall should can could may might must not no nor only own same too very just also than " +
   "oh ooh yeah yeh hey la na da woah whoa uh huh ah mmm gonna wanna gotta cause cuz till til let lets like get got go goes going come came " +
-  "all any both each few more most other some such every again ever never always still now when where why how one two").split(/\s+/));
+  "all any both each few more most other some such every again ever never always still now when where why how").split(/\s+/));
 
 // Split pasted text or a .txt / .md file into meaningful lines.
 export function parseLines(text, { skipRepeats = true } = {}) {
