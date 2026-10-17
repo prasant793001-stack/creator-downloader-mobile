@@ -414,7 +414,8 @@ async function libFill(r, { q, checkQ = q, need, sub, opts, label = "" }) {
     say("Retrying libraries…"); await sleep(2500);
     res = await Promise.all(res.map(async (x, k) => x.status === "fulfilled" ? x : (await Promise.allSettled([SOURCES[ids[k]].search(q, stype, 1)]))[0]));
   }
-  const items = res.flatMap(x => x.status === "fulfilled" ? x.value : []).filter(it => media.includes(it.type) && it.thumb && !it.watchOnly);
+  r.used ||= new Set(); // never the same picture twice for one line (e.g. across products)
+  const items = res.flatMap(x => x.status === "fulfilled" ? x.value : []).filter(it => media.includes(it.type) && it.thumb && !it.watchOnly && !r.used.has(it.uid));
   items.forEach(it => it.lic = licClass(it.license));
   if (!items.length) return { added: 0, msg: res.every(x => x.status === "rejected") ? "Libraries unreachable" : "Nothing found" };
   let n = 0;
@@ -423,6 +424,7 @@ async function libFill(r, { q, checkQ = q, need, sub, opts, label = "" }) {
     check: list => checkItems(checkQ, list, { ...checkOpts(), onEach: () => { n++; say(`Checking pictures ${n}/${list.length}…`); } })
   });
   if (!picks.length) return { added: 0, msg: `No real match in the free libraries (${rejected} of ${checked} rejected)` };
+  picks.forEach(x => r.used.add(x.it.uid));
   const pairs = [], credits = [];
   for (const x of picks) { try { const v = pick(await ensureVariants(x.it), cfg.downloader.quality || "large"); if (v) { pairs.push([x.it, v]); r.picks.push({ thumb: x.it.thumb }); (r.pickInfo ||= []).push(`${x.it.source} ai=${x.it.check?.ai == null ? "na" : Math.round(x.it.check.ai * 100)} ${String(x.it.title).slice(0, 40)}`); credits.push(`${pairs.length}. ${x.it.title} | match ${Math.round(100 * (x.it.check?.ai ?? x.it.check?.text ?? 0))}% | ${x.it.author || "unknown"} | ${SOURCES[x.it.source].name} | ${x.it.license} | ${x.it.page}`); } } catch {} }
   if (!pairs.length) return { added: 0, msg: "No downloadable files" };
@@ -452,10 +454,12 @@ async function pinFill(r, { phrase, checkQ, need, sub, title, mode }) {
   }
   setBar(`Found ${found.length} · checking the top ones…`);
   const t0 = Date.now();
-  const { chosen, checked } = await pickPinterest(found, checkQ, need, { checkOpts: checkOpts(), analyze, mode,
+  r.used ||= new Set();
+  const { chosen, checked } = await pickPinterest(found.filter(x => !r.used.has(x.u.replace(/\/\d+x(\d+_[A-Z]+)?\//, "/x/"))), checkQ, need, { checkOpts: checkOpts(), analyze, mode,
     onProgress: (n, cap, got) => setBar(`Checked ${n} · ${got} of ${need} good`) });
   console.log("ST pin pick", phrase, `found=${found.length} checked=${checked} chosen=${chosen.length} ms=${Date.now() - t0}`);
   if (!chosen.length) return { added: 0, msg: `No Pinterest picture matched (${checked} checked)` };
+  chosen.forEach(it => r.used.add(it.orig.url.replace(/\/originals\//, "/x/")));
   const list = chosen.map((it, i) => ({ url: it.orig.url, fallbackUrl: it.orig.fallback || undefined, baseName: `Pinterest ${i + 1} - ${it.title.slice(0, 60)}`, title: it.title, type: "image", thumb: it.show, page: it.page,
     source: "pinterest", sourceName: "Pinterest", query: phrase, quality: "Original", license: "Pinterest: check the original creator's rights", credit: "", subdir: sub, bulk: bulk.project,
     match: it.check?.ai != null ? Math.round(100 * it.check.ai) : undefined }));
@@ -476,7 +480,7 @@ async function checkerReady(total) {
 function bulkBegin(todo) {
   Object.assign(bulk, { running: true, paused: false, stop: false, started: true, pinAutoStop: false });
   $("#bStart").hidden = true; $("#bPause").hidden = $("#bStop").hidden = false; $("#bPinGo").hidden = true;
-  todo.forEach(r => { r.state = "ready"; r.picks = []; r.pickInfo = []; r.msg = ""; r.pinCount = 0; r.pinMsg = ""; r.prod = null; }); renderBulk();
+  todo.forEach(r => { r.state = "ready"; r.picks = []; r.pickInfo = []; r.msg = ""; r.pinCount = 0; r.pinMsg = ""; r.prod = null; r.used = new Set(); }); renderBulk();
 }
 function bulkEnd() {
   bulk.running = false; $("#bStart").hidden = false; $("#bStart").textContent = "Run again"; $("#bPause").hidden = $("#bStop").hidden = true; renderBulk();
