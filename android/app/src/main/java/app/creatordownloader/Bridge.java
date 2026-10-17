@@ -85,6 +85,8 @@ public class Bridge {
                 act.runOnUiThread(() -> act.pin.show(o));
                 return Boolean.TRUE;
             }
+            case "pinScan":
+                return act.pin.scan(a.getJSONObject(0));
             case "pinLayout": {
                 final JSONObject r = a.optJSONObject(0);
                 act.runOnUiThread(() -> act.pin.layout(r));

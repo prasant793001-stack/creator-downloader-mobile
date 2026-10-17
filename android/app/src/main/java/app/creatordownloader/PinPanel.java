@@ -147,13 +147,59 @@ final class PinPanel {
         need = o.optInt("need", 0);
         label = o.optString("label", "");
         String q = o.optString("query", "");
-        if (query == null || !q.equals(query)) {
+        if (query == null || !q.equals(query) || o.optBoolean("reload", false)) {
             query = q;
             web.loadUrl(q.isEmpty() ? "https://www.pinterest.com/" : "https://www.pinterest.com/search/pins/?q=" + Uri.encode(q));
         }
         web.setVisibility(View.VISIBLE);
         web.bringToFront();
         web.requestFocus();
+    }
+
+
+    private static final String COLLECT_JS = "(function(){var o=[],s={};document.querySelectorAll('img').forEach(function(i){"
+            + "var u=i.currentSrc||i.src||'';if(u.indexOf('pinimg.com')<0)return;if(/\\/(30x30|60x60|75x75|140x140|150x150)/.test(u))return;"
+            + "var r=i.getBoundingClientRect();if(r.width<80||r.height<60)return;var k=u.replace(/^https:\\/\\/[^\\/]+\\/[^\\/]+\\//,'');if(s[k])return;s[k]=1;"
+            + "var a=i.closest('a');o.push({u:u,t:(i.alt||'').slice(0,200),p:a?a.href:''});});"
+            + "var login=!!document.querySelector('[data-test-id=\"login-button\"],[data-test-id=\"simple-login-button\"],input[type=\"password\"]');"
+            + "return JSON.stringify({n:o.length,login:login,url:location.href,items:o.slice(0,80)});})()";
+
+    private String evalSync(String js, long timeoutMs) throws InterruptedException {
+        final String[] out = {null};
+        final java.util.concurrent.CountDownLatch l = new java.util.concurrent.CountDownLatch(1);
+        act.runOnUiThread(() -> {
+            if (web == null) { l.countDown(); return; }
+            web.evaluateJavascript(js, v -> { out[0] = v; l.countDown(); });
+        });
+        l.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+        return out[0];
+    }
+
+    /** Automatic Pinterest step: open the search for o.query in the panel (visible, your own
+     *  signed-in Pinterest), scroll a little and list the pictures shown. Runs on a worker thread.
+     *  Returns { items:[{u,t,p}], login, url }. The app then checks them and saves the best. */
+    JSONObject scan(JSONObject o) throws Exception {
+        final JSONObject show = new JSONObject(o.toString()).put("reload", true);
+        act.runOnUiThread(() -> show(show));
+        int want = o.optInt("want", 24);
+        JSONObject best = new JSONObject().put("items", new JSONArray()).put("login", false);
+        Thread.sleep(3500);
+        for (int round = 0; round < 6; round++) {
+            String raw = evalSync(COLLECT_JS, 5000);
+            try {
+                Object v = raw == null ? null : new org.json.JSONTokener(raw).nextValue();
+                if (v instanceof String) {
+                    JSONObject r = new JSONObject((String) v);
+                    if (r.optJSONArray("items") != null && r.getJSONArray("items").length() >= best.getJSONArray("items").length()) best = r;
+                    if (r.optInt("n") >= want) break;
+                    if (r.optBoolean("login") && r.optInt("n") == 0 && round >= 3) break;
+                }
+            } catch (Exception ignored) { }
+            evalSync("window.scrollBy(0, Math.round(window.innerHeight*1.2)); 1", 3000);
+            Thread.sleep(2200);
+        }
+        evalSync("window.scrollTo(0,0); 1", 3000);
+        return best;
     }
 
     void layout(JSONObject r) {

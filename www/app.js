@@ -1,7 +1,7 @@
 // Creator Downloader for Android (and installable web app). v1.3
 import { SOURCES, META, DIRECTORY, keys, licClass, LIC_LABEL, pick, ext } from "./sources.js";
 import { LOGO_MARK, HEROES, SFX } from "./art.js";
-import { parseLines, toQuery, pickBest, analyzeImage } from "./bulk.js";
+import { parseLines, toQuery, pickBest, analyzeImage, hamming } from "./bulk.js";
 import { checkItems, ensureChecker, checkerStatus, onCheckerStatus, STRICTNESS } from "./checker.js";
 import { cd, isNative } from "./bridge.js";
 
@@ -230,6 +230,7 @@ $("#pinBar").addEventListener("click", e => {
   const a = b.dataset.pn;
   if (a === "back") cd.pinNav("back");
   else if (a === "close") { if (pin.mode === "bulk") bulkPinFinish(); else setSrcTab("libs"); }
+  else if (a === "stopauto") { bulk.pinAutoStop = true; toast("Stopping after this line…"); }
   else if (a === "next") bulkPinGo(bulk.pinIdx + 1);
   else if (a === "prev") bulkPinGo(bulk.pinIdx - 1);
 });
@@ -368,12 +369,13 @@ const subdirOf = r => ["Bulk", bulk.project, `${pad2(r.i + 1)} - ${r.q || "line"
 function rowState(r) {
   if (r.state === "search") return "Searching…";
   if (r.state === "score") return r.msg || "Checking pictures…";
-  if (r.state === "fail") return esc(r.msg);
-  return r.picks.map(p => `<img src="${esc(p.thumb)}" alt="" data-onfail="hide">`).join("") + (r.state === "done" && r.msg ? ` <span>${esc(r.msg)}</span>` : "");
+  const imgs = r.picks.map(p => `<img src="${esc(p.thumb)}" alt="" data-onfail="hide"${p.pin ? ' class="pinpick"' : ""}>`).join("");
+  const libMsg = r.state === "fail" ? `<span>Libraries: ${esc(r.msg)}</span>` : r.state === "done" && r.msg ? ` <span>${esc(r.msg)}</span>` : "";
+  return imgs + libMsg + (r.pinMsg ? ` <span>Pinterest: ${esc(r.pinMsg)}</span>` : "");
 }
 function renderBulk() {
   $("#bCountLbl").textContent = `${bulk.rows.filter(r => r.on).length} of ${bulk.rows.length} lines`;
-  $("#bList").innerHTML = bulk.rows.map(r => `<li class="brow ${r.state === "done" ? "done" : r.state === "fail" ? "fail" : ["search", "score"].includes(r.state) ? "run" : ""}" data-i="${r.i}">
+  $("#bList").innerHTML = bulk.rows.map(r => `<li class="brow ${r.state === "done" || r.pinCount ? "done" : r.state === "fail" ? "fail" : ["search", "score"].includes(r.state) ? "run" : ""}" data-i="${r.i}">
     <input type="checkbox" class="toggle" data-on ${r.on ? "checked" : ""} ${bulk.running ? "disabled" : ""} aria-label="Use line ${r.i + 1}"><span class="n">${r.i + 1}</span><span class="orig">${esc(r.line)}</span>
     <input class="input q" data-q value="${esc(r.q)}" ${bulk.running ? "disabled" : ""} aria-label="Search words">
     <span class="st">${rowState(r)}${r.pinCount ? `<span class="pc">+${r.pinCount} Pinterest</span>` : ""}</span></li>`).join("");
@@ -448,9 +450,71 @@ $("#bStart").onclick = async () => {
   const need = +$("#bPin").value;
   if (!bulk.stop && need && cfg.pinterest !== false && todo.length) {
     bulk.pinRows = todo; bulk.pinNeed = need; bulk.pinIdx = 0;
-    $("#bPinGo").hidden = false; $("#bPinGo").textContent = isNative ? `Pick ${need} from Pinterest for each line` : "Pinterest picks (opens new tabs)";
+    if (isNative) await bulkPinAuto(todo, need);
+    $("#bPinGo").hidden = false; $("#bPinGo").textContent = isNative ? "Add more from Pinterest by hand" : "Pinterest picks (opens new tabs)";
   }
 };
+
+// Pinterest original-size address (sized copies are 236x / 474x / 736x); 736x as the fallback.
+function pinOriginal(u) {
+  const m = String(u).match(/^https:\/\/([^/]*pinimg\.com)\/(\d+x|\d+x\d+_[A-Z]+)\/(.+)$/);
+  return m ? { url: `https://${m[1]}/originals/${m[3]}`, fallback: `https://${m[1]}/736x/${m[3]}`, thumb: `https://${m[1]}/474x/${m[3]}` } : { url: u, fallback: null, thumb: u };
+}
+// Automatic Pinterest step: for each line, your Pinterest (signed in inside the app) is searched in
+// the panel, the pictures it shows are checked by the AI checker, and the best ones are saved.
+async function bulkPinAuto(rows, need) {
+  const setBar = (r, k, msg) => { $("#pinBar").innerHTML = `<div class="lbl">Pinterest auto · line ${k + 1} of ${rows.length}: “${esc(r.q)}”<small>${esc(msg)}</small></div><button type="button" class="go" data-pn="stopauto">Stop</button>`; };
+  bulk.pinAutoStop = false;
+  bulk.running = true; $("#bStart").hidden = true;
+  for (let k = 0; k < rows.length && !bulk.pinAutoStop; k++) {
+    const r = rows[k]; r.pinCount = 0; r.pinMsg = "";
+    prog(k, rows.length, `Pinterest: line ${r.i + 1}: ${r.q}`);
+    pin.open = true; pin.mode = "auto"; document.body.classList.add("pin-open"); $("#pinArea").hidden = false; pinPlace();
+    setBar(r, k, "Finding pictures…"); $("#pinSlot").innerHTML = "<p>Loading Pinterest…</p>";
+    await new Promise(res => requestAnimationFrame(res));
+    const scan = await cd.pinScan({ query: r.q, rect: pinRect(), want: Math.max(24, need * 8), subdir: subdirOf(r), need, label: r.q }).catch(() => null);
+    const found = scan?.items || [];
+    console.log("ST pin scan", r.q, found.length, scan?.login ? "login-shown" : "", scan?.url || "");
+    if (!found.length) {
+      r.pinMsg = scan?.login ? "Sign in to Pinterest first" : "Pinterest showed no pictures";
+      renderBulk();
+      if (scan?.login) { toast("Sign in to Pinterest in the panel, then press Run again."); setBar(r, k, "Sign in here (email + password works best), then Run again."); bulk.running = false; $("#bStart").hidden = false; return; }
+      continue;
+    }
+    const items = found.map(x => { const o = pinOriginal(x.u); return { uid: "pin-" + o.url, source: "pinterest", type: "image", title: (x.t || "").replace(/\s+/g, " ").trim() || "Pinterest image", tags: "", desc: "", thumb: o.thumb, orig: o, page: x.p || "" }; });
+    setBar(r, k, `Checking ${items.length} pictures…`);
+    let n = 0;
+    await checkItems(r.q, items, { ...checkOpts(), onEach: () => { n++; if (n % 3 === 0) setBar(r, k, `Checking pictures ${n}/${items.length}…`); } });
+    const aiOn = items.some(it => it.check?.ai != null);
+    // With the AI: best checked matches. Without it: Pinterest's own order (its search is the judge).
+    let pool = aiOn ? items.filter(it => it.check?.ok).sort((a, b) => b.check.score - a.check.score) : items.slice();
+    const chosen = [];
+    for (const it of pool) {
+      if (chosen.length >= need) break;
+      const st = await analyze(it).catch(() => null);
+      if (st && chosen.some(c => c.st && hamming(c.st.hash, st.hash) <= 6)) continue; // same picture twice
+      if (st && st.notes.includes("flat / blank")) continue;
+      it.st = st; chosen.push(it);
+    }
+    if (!chosen.length) { r.pinMsg = `No Pinterest picture matched (${items.length} checked)`; renderBulk(); continue; }
+    const sub = subdirOf(r);
+    const list = chosen.map((it, i) => ({ url: it.orig.url, fallbackUrl: it.orig.fallback || undefined, baseName: `Pinterest ${i + 1} - ${it.title.slice(0, 60)}`, title: it.title, type: "image", thumb: it.thumb, page: it.page,
+      source: "pinterest", sourceName: "Pinterest", query: r.q, quality: "Original", license: "Pinterest: check the original creator's rights", credit: "", subdir: sub, bulk: bulk.project,
+      match: it.check?.ai != null ? Math.round(100 * it.check.ai) : undefined }));
+    const added = (await cd.download(list)) || [];
+    added.forEach(j => jobs.set(j.id, j)); updateBadge();
+    r.pinCount = added.length; chosen.forEach(it => r.picks.push({ thumb: it.thumb, pin: true }));
+    (r.pickInfo ||= []).push(...chosen.map(it => `pinterest ai=${it.check?.ai == null ? "na" : Math.round(it.check.ai * 100)} ${it.title.slice(0, 40)}`));
+    cd.bulkCredits(sub, `Pinterest picks for "${r.q}":\n${chosen.map((it, i) => `${i + 1}. ${it.title} | match ${it.check?.ai != null ? Math.round(100 * it.check.ai) + "%" : "n/a"} | ${it.page}`).join("\n")}\n`);
+    r.pinMsg = added.length < need ? `only ${added.length} good on Pinterest` : "";
+    renderBulk();
+  }
+  pinClose();
+  bulk.running = false; $("#bStart").hidden = false;
+  const got = rows.reduce((a, r) => a + (r.pinCount || 0), 0);
+  prog(rows.length, rows.length, `Done · Pinterest added ${got} pictures`);
+  if (got) toast(`Pinterest: ${got} pictures saved.`);
+}
 // Bulk Pinterest step: Pinterest opens inside the Bulk screen, one line at a time. You long-press the
 // pictures you like; each goes into that line's folder and the next line opens after the set number.
 $("#bPinGo").onclick = () => {

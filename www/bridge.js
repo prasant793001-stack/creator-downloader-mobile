@@ -99,6 +99,7 @@ export const cd = {
   pinLayout: rect => NATIVE ? call("pinLayout", rect) : null,
   pinHide: () => NATIVE ? call("pinHide") : null,
   pinNav: what => NATIVE ? call("pinNav", what) : null,
+  pinScan: o => NATIVE ? call("pinScan", o) : null,
   pinOpenTab: query => window.open("https://www.pinterest.com/search/pins/?q=" + encodeURIComponent(query || ""), "_blank", "noopener"),
   pinSignOut: () => NATIVE && call("pinSignOut"),
   bulkCredits: (subdir, text) => NATIVE ? call("bulkCredits", subdir, text) : null
