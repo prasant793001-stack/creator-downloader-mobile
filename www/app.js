@@ -551,19 +551,23 @@ function toast(msg) { const el = document.createElement("div"); el.className = "
 
 /* ---------------- self-test (used by the automatic tests on GitHub) ---------------- */
 async function waitFor(fn, ms, step = 500) { const t = Date.now(); while (Date.now() - t < ms) { try { if (await fn()) return true; } catch {} await sleep(step); } return false; }
-async function selftest() {
+async function selftest(mode) {
+  // mode "native": Android emulator run, focused on what only the app does (saving files, Pinterest panel).
+  // The AI checker is tested in the Chrome run; the emulator is too slow for it.
+  const light = mode === "native";
   const log = (...a) => console.log("ST " + a.join(" "));
   const shot = async name => { log("SHOT " + name); await sleep(4000); };
   try {
     log("boot", isNative ? "native" : "web", version, navigator.userAgent);
-    await saveSettings({ check: { ai: true, strict: "normal", hideWeak: true }, auto: { on: true, count: 3, videos: false } }); paintAutoChip();
+    await saveSettings({ check: { ai: !light, strict: "normal", hideWeak: true }, auto: { on: true, count: 3, videos: false } }); paintAutoChip();
     await shot("home");
     const t0 = Date.now();
-    try { await ensureChecker(); log("ai ready in", Date.now() - t0, "ms"); } catch (e) { log("ai FAILED", e.message); }
-    for (const q of ["red apple", "lighthouse"]) {
+    if (!light) { try { await ensureChecker(); log("ai ready in", Date.now() - t0, "ms"); } catch (e) { log("ai FAILED", e.message); } }
+    for (const q of light ? ["lighthouse"] : ["red apple", "lighthouse", "sports car"]) {
       startSearch(q);
       const ok = await waitFor(() => state.q === q && !state.busy && state.checkDone && (lastAuto?.q === q), 240000);
       log("search", q, ok ? "finished" : "TIMEOUT", JSON.stringify(Object.fromEntries(Object.entries(state.status).map(([k, v]) => [k, v.err || v.n]))));
+      log("counts", `ok=${state.items.filter(it => it.check?.ok).length} weak=${state.items.filter(it => it.check && !it.check.ok).length} unchecked=${state.items.filter(it => !it.check).length} ai-scored=${state.items.filter(it => it.check?.ai != null).length}`);
       log("results", state.items.slice(0, 10).map(it => `[${it.check?.ok ? "OK" : "--"} ai=${it.check?.ai == null ? "na" : Math.round(it.check.ai * 100)} txt=${Math.round((it.check?.text ?? 0) * 100)} ${it.source}] ${String(it.title).slice(0, 50)}`).join(" || "));
       log("rejected", state.items.filter(it => it.check && !it.check.ok).slice(0, 8).map(it => `[ai=${it.check.ai == null ? "na" : Math.round(it.check.ai * 100)} txt=${Math.round(it.check.text * 100)} ${it.source}] ${String(it.title).slice(0, 50)}`).join(" || "));
       log("auto", JSON.stringify(lastAuto));
@@ -573,7 +577,7 @@ async function selftest() {
     }
     show("bulk");
     $("#bText").value = "A lighthouse by the sea at night\nRed roses in the rain\n[Chorus]\nRed roses in the rain";
-    $("#bName").value = "Selftest"; $("#bCount").value = "2"; $("#bPin").value = "2"; $("#bShape").value = "any";
+    $("#bName").value = "Selftest"; $("#bCount").value = light ? "1" : "2"; $("#bPin").value = "2"; $("#bShape").value = "any";
     $("#bMake").click(); await sleep(400); $("#bStart").click();
     const bok = await waitFor(() => bulk.started && !bulk.running, 420000);
     log("bulk", bok ? "finished" : "TIMEOUT", bulk.rows.map(r => `${r.q}=${r.state}/${r.picks.length}${r.msg ? "(" + r.msg + ")" : ""}`).join(" | "));
@@ -605,7 +609,7 @@ async function selftest() {
   loadPicks();
   if (!isNative && "serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
   // Get the AI checker ready in the background so the first search is quick.
-  if (cfg.check.ai !== false) setTimeout(() => ensureChecker().catch(() => {}), 1500);
   const st = new URLSearchParams(location.search).get("selftest");
-  if (st) selftest();
+  if (cfg.check.ai !== false && !st) setTimeout(() => ensureChecker().catch(() => {}), 1500);
+  if (st) selftest(st);
 })();
