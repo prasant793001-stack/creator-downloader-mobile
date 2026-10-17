@@ -108,6 +108,14 @@ jobs:
           npm init -y >/dev/null && npm i @huggingface/transformers@4.3.0 >/dev/null
           node calibrate.mjs
           mv ci-out-cal "$GITHUB_WORKSPACE/"
+      - name: Publish calibration to the ci-calibration branch
+        if: always()
+        run: |
+          mkdir -p ci-out-cal && cd ci-out-cal && rm -f rows.json.gz && gzip -k rows.json 2>/dev/null; rm -f rows.json
+          echo "${GITHUB_SHA}" > COMMIT
+          git init -q -b ci-calibration && git config user.name "CI" && git config user.email "ci@users.noreply.github.com"
+          git add -A && git commit -qm "Calibration for ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-calibration
       - uses: actions/upload-artifact@v4
         if: always()
         with:
