@@ -34,7 +34,7 @@ const softmax0 = sims => { const l = sims.map(s => 100 * s), m = Math.max(...l),
 const tok = await AutoTokenizer.from_pretrained(MODEL);
 const proc = await AutoProcessor.from_pretrained(MODEL);
 const tm = await CLIPTextModelWithProjection.from_pretrained(MODEL, { dtype: "q8" });
-const vm = await CLIPVisionModelWithProjection.from_pretrained(MODEL, { dtype: "q8" });
+const vm = await CLIPVisionModelWithProjection.from_pretrained(MODEL, { dtype: "fp16" });
 async function embedTexts(arr) { const { text_embeds } = await tm(tok(arr, { padding: "max_length", truncation: true })); const d = text_embeds.dims[1]; return arr.map((_, i) => norm(text_embeds.data.slice(i * d, (i + 1) * d))); }
 const prompt = q => `a photo of ${q}`;
 const allTexts = [...TOPICS.map(prompt), "a photo", ...BROAD];
