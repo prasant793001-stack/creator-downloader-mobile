@@ -3,6 +3,7 @@ import { SOURCES, META, DIRECTORY, keys, licClass, LIC_LABEL, pick, ext } from "
 import { LOGO_MARK, HEROES, SFX } from "./art.js";
 import { parseLines, toQuery, pickBest, analyzeImage, hamming } from "./bulk.js";
 import { pickPinterest } from "./pinauto.js";
+import { mountProductPicker, phraseFor, PRODUCT_CSS } from "./products.js";
 import { checkItems, ensureChecker, checkerStatus, onCheckerStatus, STRICTNESS } from "./checker.js";
 import { cd, isNative } from "./bridge.js";
 
@@ -231,7 +232,7 @@ $("#pinBar").addEventListener("click", e => {
   const a = b.dataset.pn;
   if (a === "back") cd.pinNav("back");
   else if (a === "close") { if (pin.mode === "bulk") bulkPinFinish(); else setSrcTab("libs"); }
-  else if (a === "stopauto") { bulk.pinAutoStop = true; toast("Stopping after this line…"); }
+  else if (a === "stopauto") { bulk.pinAutoStop = true; toast("Stopping after this one…"); }
   else if (a === "next") bulkPinGo(bulk.pinIdx + 1);
   else if (a === "prev") bulkPinGo(bulk.pinIdx - 1);
 });
@@ -366,13 +367,25 @@ $("#bMake").onclick = () => {
   bulk.project = ($("#bName").value.trim() || lines[0].slice(0, 30)) + " " + new Date().toISOString().slice(0, 10);
   $("#bStep2").hidden = false; $("#bPinGo").hidden = true; renderBulk(); $("#bStep2").scrollIntoView({ behavior: "smooth" });
 };
+// Print products (T-shirt, mug, …): chosen in Bulk, remembered between runs.
+const productState = { items: [], template: "" };
+let productUI = null;
+function paintProductMode() {
+  const on = productState.items.length > 0;
+  $$("#v-bulk .perline").forEach(el => el.hidden = on);
+  $$("#v-bulk .prodonly").forEach(el => el.hidden = !on || !isNative);
+  const first = ($("#bText").value.split("\n").map(l => l.trim()).find(Boolean)) || "";
+  $("#prodBox").dataset.sample = first ? toQuery(first) : "one piece luffy";
+}
 const subdirOf = r => ["Bulk", bulk.project, `${pad2(r.i + 1)} - ${r.q || "line"}`];
 function rowState(r) {
   if (r.state === "search") return "Searching…";
-  if (r.state === "score") return r.msg || "Checking pictures…";
+  const pm = () => r.prod ? `<span class="prodst">${Object.entries(r.prod).map(([n, x]) => `${esc(n)} ${x.got}/${x.need}${!x.got && x.msg ? " (" + esc(x.msg) + ")" : ""}`).join(" · ")}</span>` : "";
+  if (r.state === "score") return esc(r.msg || "Checking pictures…") + pm();
   const imgs = r.picks.map(p => `<img src="${esc(p.thumb)}" alt="" data-onfail="hide"${p.pin ? ' class="pinpick"' : ""}>`).join("");
   const libMsg = r.state === "fail" ? `<span>Libraries: ${esc(r.msg)}</span>` : r.state === "done" && r.msg ? ` <span>${esc(r.msg)}</span>` : "";
-  return imgs + libMsg + (r.pinMsg ? ` <span>Pinterest: ${esc(r.pinMsg)}</span>` : "");
+  const prodMsg = r.prod ? `<span class="prodst">${Object.entries(r.prod).map(([n, x]) => `${esc(n)} ${x.got}/${x.need}${!x.got && x.msg ? " (" + esc(x.msg) + ")" : ""}`).join(" · ")}</span>` : "";
+  return imgs + (r.prod ? prodMsg : libMsg + (r.pinMsg ? ` <span>Pinterest: ${esc(r.pinMsg)}</span>` : ""));
 }
 function renderBulk() {
   $("#bCountLbl").textContent = `${bulk.rows.filter(r => r.on).length} of ${bulk.rows.length} lines`;
@@ -389,59 +402,105 @@ $("#bStop").onclick = () => { bulk.stop = true; bulk.paused = false; };
 const tcache = new Map();
 async function analyze(it) { if (tcache.has(it.uid)) return tcache.get(it.uid); const d = await getImage(it); const st = d ? await analyzeImage(d).catch(() => null) : null; tcache.set(it.uid, st); return st; }
 function prog(done, total, label) { $("#bProg").hidden = false; $("#bProg i").style.width = (total ? done / total * 100 : 0) + "%"; $("#bProg span").textContent = label; }
-async function bulkOne(r, opts) {
-  r.state = "search"; r.msg = ""; renderBulk();
-  const media = opts.media === "both" ? ["image", "video"] : [opts.media];
+// Free libraries: search `q`, check pictures against `checkQ`, save the best `need` into `sub`.
+async function libFill(r, { q, checkQ = q, need, sub, opts, label = "" }) {
+  const media = opts.media === "both" ? ["image", "video"] : [opts.media || "image"];
   const ids = Object.keys(SOURCES).filter(id => enabledSet().has(id) && keyOK(id) && !SOURCES[id].watchOnly && SOURCES[id].types.some(t => media.includes(t)));
   const stype = media.length > 1 ? "all" : media[0];
-  let res = await Promise.allSettled(ids.map(id => SOURCES[id].search(r.q, stype, 1)));
+  const say = m => { r.msg = (label ? label + ": " : "") + m; renderBulk(); };
+  let res = await Promise.allSettled(ids.map(id => SOURCES[id].search(q, stype, 1)));
   // Libraries sometimes refuse quick repeat searches: wait a moment and ask the failed ones again.
   if (res.some(x => x.status === "rejected")) {
-    r.msg = "Retrying libraries…"; renderBulk(); await sleep(2500);
-    res = await Promise.all(res.map(async (x, k) => x.status === "fulfilled" ? x : (await Promise.allSettled([SOURCES[ids[k]].search(r.q, stype, 1)]))[0]));
+    say("Retrying libraries…"); await sleep(2500);
+    res = await Promise.all(res.map(async (x, k) => x.status === "fulfilled" ? x : (await Promise.allSettled([SOURCES[ids[k]].search(q, stype, 1)]))[0]));
   }
   const items = res.flatMap(x => x.status === "fulfilled" ? x.value : []).filter(it => media.includes(it.type) && it.thumb && !it.watchOnly);
   items.forEach(it => it.lic = licClass(it.license));
-  if (!items.length) {
-    const errs = res.map((x, k) => x.status === "rejected" ? `${SOURCES[ids[k]].name}: ${x.reason?.message || x.reason}` : null).filter(Boolean);
-    r.state = "fail"; r.msg = res.every(x => x.status === "rejected") ? "Libraries unreachable" : "Nothing found";
-    console.warn("Bulk line", r.i + 1, r.q, r.msg, errs.join(" | "));
-    return;
-  }
-  r.state = "score"; renderBulk();
+  if (!items.length) return { added: 0, msg: res.every(x => x.status === "rejected") ? "Libraries unreachable" : "Nothing found" };
   let n = 0;
-  const { picks, checked, rejected } = await pickBest(items, r.q, opts, {
+  const { picks, checked, rejected } = await pickBest(items, checkQ, { ...opts, count: need }, {
     analyze,
-    check: list => checkItems(r.q, list, { ...checkOpts(), onEach: () => { n++; r.msg = `Checking pictures ${n}/${list.length}…`; renderBulk(); } })
+    check: list => checkItems(checkQ, list, { ...checkOpts(), onEach: () => { n++; say(`Checking pictures ${n}/${list.length}…`); } })
   });
-  if (!picks.length) { r.state = "fail"; r.msg = `No real match in the free libraries (${rejected} of ${checked} pictures rejected). Use the Pinterest step for this line.`; return; }
+  if (!picks.length) return { added: 0, msg: `No real match in the free libraries (${rejected} of ${checked} rejected)` };
   const pairs = [], credits = [];
   for (const x of picks) { try { const v = pick(await ensureVariants(x.it), cfg.downloader.quality || "large"); if (v) { pairs.push([x.it, v]); r.picks.push({ thumb: x.it.thumb }); (r.pickInfo ||= []).push(`${x.it.source} ai=${x.it.check?.ai == null ? "na" : Math.round(x.it.check.ai * 100)} ${String(x.it.title).slice(0, 40)}`); credits.push(`${pairs.length}. ${x.it.title} | match ${Math.round(100 * (x.it.check?.ai ?? x.it.check?.text ?? 0))}% | ${x.it.author || "unknown"} | ${SOURCES[x.it.source].name} | ${x.it.license} | ${x.it.page}`); } } catch {} }
-  if (!pairs.length) { r.state = "fail"; r.msg = "No downloadable files"; return; }
-  const sub = subdirOf(r);
-  await enqueue(pairs, (it, v, k) => ({ subdir: sub, baseName: `${k + 1} - ${it.title}`, query: r.q, bulk: bulk.project }));
-  cd.bulkCredits(sub, `Line ${r.i + 1}: "${r.line}"\nSearch: ${r.q}\n${credits.join("\n")}\n`);
-  r.state = "done"; r.msg = pairs.length < opts.count ? `only ${pairs.length} good` : "";
+  if (!pairs.length) return { added: 0, msg: "No downloadable files" };
+  const added = await enqueue(pairs, (it, v, k) => ({ subdir: sub, baseName: `${k + 1} - ${it.title}`, query: q, bulk: bulk.project }));
+  cd.bulkCredits(sub, `Line ${r.i + 1}: "${r.line}"\nSearch: ${q}\n${credits.join("\n")}\n`);
+  return { added: added.length, msg: pairs.length < need ? `only ${pairs.length} good` : "" };
 }
+async function bulkOne(r, opts) {
+  r.state = "search"; r.msg = ""; renderBulk();
+  r.state = "score";
+  const { added, msg } = await libFill(r, { q: r.q, need: opts.count, sub: subdirOf(r), opts });
+  r.state = added ? "done" : "fail"; r.msg = msg;
+}
+
+// Pinterest, automatic: search `phrase` in the panel, check against `checkQ`, save the best `need` into `sub`.
+async function pinFill(r, { phrase, checkQ, need, sub, title, mode }) {
+  const setBar = msg => { $("#pinBar").innerHTML = `<div class="lbl">${esc(title)}<small>${esc(msg)}</small></div><button type="button" class="go" data-pn="stopauto">Stop</button>`; };
+  pin.open = true; pin.mode = "auto"; document.body.classList.add("pin-open"); $("#pinArea").hidden = false; pinPlace();
+  setBar(`Searching “${phrase}”…`); $("#pinSlot").innerHTML = "<p>Loading Pinterest…</p>";
+  await new Promise(res => requestAnimationFrame(res));
+  const scan = await cd.pinScan({ query: phrase, rect: pinRect(), want: need * 2 + 6, subdir: sub, need, label: phrase }).catch(() => null);
+  const found = scan?.items || [];
+  console.log("ST pin scan", phrase, found.length, scan?.login ? "login-shown" : "", scan?.url || "");
+  if (!found.length) {
+    if (scan?.login) setBar("Sign in here (email + password works best), then Run again.");
+    return { added: 0, login: !!scan?.login, msg: scan?.login ? "Sign in to Pinterest first" : "Pinterest showed no pictures" };
+  }
+  setBar(`Found ${found.length} · checking the top ones…`);
+  const t0 = Date.now();
+  const { chosen, checked } = await pickPinterest(found, checkQ, need, { checkOpts: checkOpts(), analyze, mode,
+    onProgress: (n, cap, got) => setBar(`Checked ${n} · ${got} of ${need} good`) });
+  console.log("ST pin pick", phrase, `found=${found.length} checked=${checked} chosen=${chosen.length} ms=${Date.now() - t0}`);
+  if (!chosen.length) return { added: 0, msg: `No Pinterest picture matched (${checked} checked)` };
+  const list = chosen.map((it, i) => ({ url: it.orig.url, fallbackUrl: it.orig.fallback || undefined, baseName: `Pinterest ${i + 1} - ${it.title.slice(0, 60)}`, title: it.title, type: "image", thumb: it.show, page: it.page,
+    source: "pinterest", sourceName: "Pinterest", query: phrase, quality: "Original", license: "Pinterest: check the original creator's rights", credit: "", subdir: sub, bulk: bulk.project,
+    match: it.check?.ai != null ? Math.round(100 * it.check.ai) : undefined }));
+  const added = (await cd.download(list)) || [];
+  added.forEach(j => jobs.set(j.id, j)); updateBadge();
+  chosen.forEach(it => r.picks.push({ thumb: it.show, pin: true }));
+  (r.pickInfo ||= []).push(...chosen.map(it => `pinterest ai=${it.check?.ai == null ? "na" : Math.round(it.check.ai * 100)} ${it.title.slice(0, 40)}`));
+  cd.bulkCredits(sub, `Pinterest picks for "${phrase}":\n${chosen.map((it, i) => `${i + 1}. ${it.title} | match ${it.check?.ai != null ? Math.round(100 * it.check.ai) + "%" : "n/a"} | ${it.page}`).join("\n")}\n`);
+  return { added: added.length, msg: added.length < need ? `only ${added.length} good on Pinterest` : "" };
+}
+
+async function checkerReady(total) {
+  if (cfg.check.ai === false || checkerStatus().state === "ready") return;
+  const off = onCheckerStatus(st => { if (st.state === "loading") prog(0, total, st.total ? `Getting the AI checker ready: ${fmtBytes(st.loaded)} of ${fmtBytes(st.total)} (first time only)` : "Getting the AI checker ready…"); });
+  try { await ensureChecker(); } catch { toast("AI checker unavailable. Checking words only."); }
+  off();
+}
+function bulkBegin(todo) {
+  Object.assign(bulk, { running: true, paused: false, stop: false, started: true, pinAutoStop: false });
+  $("#bStart").hidden = true; $("#bPause").hidden = $("#bStop").hidden = false; $("#bPinGo").hidden = true;
+  todo.forEach(r => { r.state = "ready"; r.picks = []; r.pickInfo = []; r.msg = ""; r.pinCount = 0; r.pinMsg = ""; r.prod = null; }); renderBulk();
+}
+function bulkEnd() {
+  bulk.running = false; $("#bStart").hidden = false; $("#bStart").textContent = "Run again"; $("#bPause").hidden = $("#bStop").hidden = true; renderBulk();
+}
+const halted = () => bulk.stop || bulk.pinAutoStop;
+async function waitPause() { while (bulk.paused && !bulk.stop) await sleep(300); }
+
 $("#bStart").onclick = async () => {
   if (bulk.running) return;
   const todo = bulk.rows.filter(r => r.on && r.q); if (!todo.length) return toast("Tick at least one line.");
   const opts = { count: +$("#bCount").value, shape: $("#bShape").value, lic: $("#bLic").value, media: $("#bMedia").value };
+  const prods = productState.items.filter(p => p.count > 0);
+  saveSettings({ bulk: { count: opts.count, pin: +$("#bPin").value, pinCheck: $("#bPinCheck").value, products: productState.items, template: productState.template, prodSrc: $("#bProdSrc").value } }).catch(() => {});
+  if (productState.items.length) {
+    if (!prods.length) return toast("Set how many pictures you want for at least one product.");
+    return runProducts(todo, prods, opts);
+  }
   const pinWanted = +$("#bPin").value;
   if (!opts.count && !(pinWanted && isNative && cfg.pinterest !== false)) return toast(isNative ? "Set at least one of the two numbers above 0." : "Set the free libraries number above 0 (Pinterest works in the Android app).");
-  saveSettings({ bulk: { count: opts.count, pin: pinWanted, pinCheck: $("#bPinCheck").value } }).catch(() => {});
-  Object.assign(bulk, { running: true, paused: false, stop: false, started: true });
-  $("#bStart").hidden = true; $("#bPause").hidden = $("#bStop").hidden = false; $("#bPinGo").hidden = true;
-  todo.forEach(r => { r.state = "ready"; r.picks = []; r.pickInfo = []; r.msg = ""; }); renderBulk();
-  if (cfg.check.ai !== false && checkerStatus().state !== "ready") {
-    const off = onCheckerStatus(st => { if (st.state === "loading") prog(0, todo.length, st.total ? `Getting the AI checker ready: ${fmtBytes(st.loaded)} of ${fmtBytes(st.total)} (first time only)` : "Getting the AI checker ready…"); });
-    try { await ensureChecker(); } catch { toast("AI checker unavailable. Checking words only."); }
-    off();
-  }
+  bulkBegin(todo);
+  await checkerReady(todo.length);
   let done = 0;
   for (const r of todo) {
-    while (bulk.paused && !bulk.stop) await sleep(300);
-    if (bulk.stop) break;
+    await waitPause(); if (bulk.stop) break;
     prog(done, todo.length, `Line ${r.i + 1}: ${r.q}`);
     if (!opts.count) { r.state = "ready"; continue; } // free libraries switched off: Pinterest only
     try { await bulkOne(r, opts); } catch (e) { r.state = "fail"; r.msg = e.message; console.error("Bulk line failed", r.q, e); }
@@ -450,61 +509,65 @@ $("#bStart").onclick = async () => {
   }
   const ok = todo.filter(r => r.state === "done").length;
   prog(done, todo.length, bulk.stop ? `Stopped · ${ok} lines` : `Done · ${ok} of ${todo.length} lines`);
-  bulk.running = false; $("#bStart").hidden = false; $("#bStart").textContent = "Run again"; $("#bPause").hidden = $("#bStop").hidden = true; renderBulk();
   if (ok) celebrate();
-  const need = +$("#bPin").value;
-  if (!bulk.stop && need && cfg.pinterest !== false && todo.length) {
-    bulk.pinRows = todo; bulk.pinNeed = need; bulk.pinIdx = 0;
-    if (isNative) await bulkPinAuto(todo, need);
-    $("#bPinGo").hidden = false; $("#bPinGo").textContent = isNative ? "Add more from Pinterest by hand" : "Pinterest picks (opens new tabs)";
+  if (!bulk.stop && pinWanted && cfg.pinterest !== false && isNative) {
+    const mode = $("#bPinCheck").value || "quick";
+    for (let k = 0; k < todo.length && !halted(); k++) {
+      const r = todo[k]; await waitPause();
+      prog(k, todo.length, `Pinterest: line ${r.i + 1}: ${r.q}`);
+      const res = await pinFill(r, { phrase: r.q, checkQ: r.q, need: pinWanted, sub: subdirOf(r), title: `Pinterest auto · line ${k + 1} of ${todo.length}: “${r.q}”`, mode });
+      r.pinCount = res.added; r.pinMsg = res.msg; renderBulk();
+      if (res.login) { toast("Sign in to Pinterest in the panel, then press Run again."); break; }
+    }
+    if (!todo.some(r => r.pinMsg === "Sign in to Pinterest first")) pinClose();
+    const got = todo.reduce((a, r) => a + (r.pinCount || 0), 0);
+    prog(todo.length, todo.length, `Done · Pinterest added ${got} pictures`);
+    if (got) toast(`Pinterest: ${got} pictures saved.`);
   }
+  bulk.pinRows = todo; bulk.pinNeed = pinWanted || 3; bulk.pinIdx = 0;
+  if (cfg.pinterest !== false) { $("#bPinGo").hidden = false; $("#bPinGo").textContent = isNative ? "Add more from Pinterest by hand" : "Pinterest picks (opens new tabs)"; }
+  bulkEnd();
 };
 
-// Automatic Pinterest step: for each line, your Pinterest (signed in inside the app) is searched in
-// the panel, the pictures it shows are checked by the AI checker, and the best ones are saved.
-async function bulkPinAuto(rows, need) {
-  const pinMode = $("#bPinCheck")?.value || "quick";
-  const setBar = (r, k, msg) => { $("#pinBar").innerHTML = `<div class="lbl">Pinterest auto · line ${k + 1} of ${rows.length}: “${esc(r.q)}”<small>${esc(msg)}</small></div><button type="button" class="go" data-pn="stopauto">Stop</button>`; };
-  bulk.pinAutoStop = false;
-  bulk.running = true; $("#bStart").hidden = true;
-  for (let k = 0; k < rows.length && !bulk.pinAutoStop; k++) {
-    const r = rows[k]; r.pinCount = 0; r.pinMsg = "";
-    prog(k, rows.length, `Pinterest: line ${r.i + 1}: ${r.q}`);
-    pin.open = true; pin.mode = "auto"; document.body.classList.add("pin-open"); $("#pinArea").hidden = false; pinPlace();
-    setBar(r, k, "Finding pictures…"); $("#pinSlot").innerHTML = "<p>Loading Pinterest…</p>";
-    await new Promise(res => requestAnimationFrame(res));
-    const scan = await cd.pinScan({ query: r.q, rect: pinRect(), want: need * 2 + 6, subdir: subdirOf(r), need, label: r.q }).catch(() => null);
-    const found = scan?.items || [];
-    console.log("ST pin scan", r.q, found.length, scan?.login ? "login-shown" : "", scan?.url || "");
-    if (!found.length) {
-      r.pinMsg = scan?.login ? "Sign in to Pinterest first" : "Pinterest showed no pictures";
-      renderBulk();
-      if (scan?.login) { toast("Sign in to Pinterest in the panel, then press Run again."); setBar(r, k, "Sign in here (email + password works best), then Run again."); bulk.running = false; $("#bStart").hidden = false; return; }
-      continue;
+// Print products: every line × every product. Pinterest first (best for print graphics), then the free
+// libraries fill any shortfall (or only one of them, as chosen). Folder: Bulk / project / line / product.
+async function runProducts(todo, prods, opts) {
+  const src = $("#bProdSrc").value || "both";
+  const usePin = src !== "libs" && isNative && cfg.pinterest !== false, useLib = src !== "pin" || !isNative;
+  const mode = $("#bPinCheck").value || "quick";
+  bulkBegin(todo);
+  await checkerReady(todo.length);
+  const total = todo.length * prods.length; let step = 0, login = false;
+  outer: for (const r of todo) {
+    r.prod = {}; r.state = "score";
+    for (const p of prods) {
+      await waitPause(); if (halted()) break outer;
+      const phrase = phraseFor(r.q, p.name, productState.template);
+      const sub = [...subdirOf(r), p.name];
+      const st = r.prod[p.name] = { got: 0, need: p.count, msg: "" };
+      prog(step++, total, `Line ${r.i + 1} · ${p.name}: ${phrase}`);
+      if (usePin) {
+        const res = await pinFill(r, { phrase, checkQ: r.q, need: p.count, sub, title: `Line ${r.i + 1} · ${p.name}: “${phrase}”`, mode });
+        st.got += res.added; st.msg = res.msg;
+        if (res.login) { login = true; toast("Sign in to Pinterest in the panel, then press Run again."); break outer; }
+      }
+      if (st.got < p.count && useLib) {
+        const res = await libFill(r, { q: r.q, checkQ: r.q, need: p.count - st.got, sub, opts, label: p.name });
+        st.got += res.added; if (!st.got) st.msg = res.msg;
+        await sleep(600);
+      }
+      r.msg = ""; renderBulk();
     }
-    setBar(r, k, `Found ${found.length} · checking the top ones…`);
-    const t0 = Date.now();
-    const { chosen, checked } = await pickPinterest(found, r.q, need, { checkOpts: checkOpts(), analyze, mode: pinMode,
-      onProgress: (n, cap, got) => setBar(r, k, `Checked ${n} · ${got} of ${need} good`) });
-    console.log("ST pin pick", r.q, `found=${found.length} checked=${checked} chosen=${chosen.length} ms=${Date.now() - t0}`);
-    if (!chosen.length) { r.pinMsg = `No Pinterest picture matched (${checked} checked)`; renderBulk(); continue; }
-    const sub = subdirOf(r);
-    const list = chosen.map((it, i) => ({ url: it.orig.url, fallbackUrl: it.orig.fallback || undefined, baseName: `Pinterest ${i + 1} - ${it.title.slice(0, 60)}`, title: it.title, type: "image", thumb: it.show, page: it.page,
-      source: "pinterest", sourceName: "Pinterest", query: r.q, quality: "Original", license: "Pinterest: check the original creator's rights", credit: "", subdir: sub, bulk: bulk.project,
-      match: it.check?.ai != null ? Math.round(100 * it.check.ai) : undefined }));
-    const added = (await cd.download(list)) || [];
-    added.forEach(j => jobs.set(j.id, j)); updateBadge();
-    r.pinCount = added.length; chosen.forEach(it => r.picks.push({ thumb: it.show, pin: true }));
-    (r.pickInfo ||= []).push(...chosen.map(it => `pinterest ai=${it.check?.ai == null ? "na" : Math.round(it.check.ai * 100)} ${it.title.slice(0, 40)}`));
-    cd.bulkCredits(sub, `Pinterest picks for "${r.q}":\n${chosen.map((it, i) => `${i + 1}. ${it.title} | match ${it.check?.ai != null ? Math.round(100 * it.check.ai) + "%" : "n/a"} | ${it.page}`).join("\n")}\n`);
-    r.pinMsg = added.length < need ? `only ${added.length} good on Pinterest` : "";
+    r.state = Object.values(r.prod).some(x => x.got) ? "done" : "fail";
+    if (r.state === "fail") r.msg = "No matching pictures found";
     renderBulk();
   }
-  pinClose();
-  bulk.running = false; $("#bStart").hidden = false;
-  const got = rows.reduce((a, r) => a + (r.pinCount || 0), 0);
-  prog(rows.length, rows.length, `Done · Pinterest added ${got} pictures`);
-  if (got) toast(`Pinterest: ${got} pictures saved.`);
+  if (usePin && !login) pinClose();
+  const got = todo.reduce((a, r) => a + Object.values(r.prod || {}).reduce((b, x) => b + x.got, 0), 0);
+  prog(total, total, bulk.stop ? `Stopped · ${got} pictures` : `Done · ${got} pictures for ${prods.map(p => p.name).join(", ")}`);
+  if (got) celebrate();
+  bulk.pinRows = todo; bulk.pinNeed = 3; bulk.pinIdx = 0;
+  bulkEnd();
 }
 // Bulk Pinterest step: Pinterest opens inside the Bulk screen, one line at a time. You long-press the
 // pictures you like; each goes into that line's folder and the next line opens after the set number.
@@ -663,6 +726,18 @@ async function selftest(mode) {
     log("bulk", bok ? "finished" : "TIMEOUT", bulk.rows.map(r => `${r.q}=${r.state}/${r.picks.length}${r.msg ? "(" + r.msg + ")" : ""}`).join(" | "));
     log("bulk picks", bulk.rows.map(r => r.q + ": " + (r.pickInfo || []).join(" ; ")).join(" || "));
     await shot("bulk");
+    if (!light) { // print products mode
+      await waitFor(() => [...jobs.values()].every(j => !["queued", "downloading"].includes(j.status)), 120000);
+      const keep = productState.items.slice();
+      productState.items = [{ name: "T-shirt", count: 2 }, { name: "Mug", count: 1 }]; productUI.repaint(); paintProductMode();
+      $("#bText").value = "One piece luffy\nSpiderman"; $("#bMake").click(); await sleep(400);
+      log("product phrase", phraseFor("one piece luffy", "T-shirt", productState.template));
+      $("#bStart").click();
+      const pok = await waitFor(() => !bulk.running && bulk.rows.every(r => r.prod), 420000);
+      log("products", pok ? "finished" : "TIMEOUT", bulk.rows.map(r => `${r.q}: ${Object.entries(r.prod || {}).map(([n, x]) => `${n} ${x.got}/${x.need}${x.msg ? "(" + x.msg + ")" : ""}`).join(", ")} :: ${(r.pickInfo || []).join(" ; ")}`).join(" || "));
+      await shot("bulk-products");
+      productState.items = keep; productUI.repaint(); paintProductMode();
+    }
     await waitFor(() => [...jobs.values()].every(j => !["queued", "downloading"].includes(j.status)), 120000);
     log("all jobs", JSON.stringify([...jobs.values()].reduce((a, j) => (a[j.status] = (a[j.status] || 0) + 1, a), {})), [...jobs.values()].filter(j => j.status === "failed").map(j => j.title + ": " + j.error).slice(0, 5).join(" | "));
     if (isNative) {
@@ -685,6 +760,13 @@ async function selftest(mode) {
   await loadSettings();
   state.pref = cfg.downloader.quality || "large"; $("#pref").value = state.pref;
   buildHome(); renderCard(); paintAutoChip();
+  { const st = document.createElement("style"); st.textContent = PRODUCT_CSS; document.head.appendChild(st); }
+  if (cfg.bulk?.products) productState.items = cfg.bulk.products.map(p => ({ name: String(p.name), count: +p.count || 0 }));
+  if (cfg.bulk?.template) productState.template = cfg.bulk.template;
+  productUI = mountProductPicker($("#prodBox"), productState, () => { paintProductMode(); saveSettings({ bulk: { products: productState.items, template: productState.template } }).catch(() => {}); });
+  paintProductMode();
+  $("#bText").addEventListener("change", () => { paintProductMode(); productUI.repaint(); });
+  if (cfg.bulk?.prodSrc) $("#bProdSrc").value = cfg.bulk.prodSrc;
   if (cfg.bulk) { if (cfg.bulk.count != null) $("#bCount").value = String(cfg.bulk.count); if (cfg.bulk.pin != null) $("#bPin").value = String(cfg.bulk.pin); if (cfg.bulk.pinCheck) $("#bPinCheck").value = cfg.bulk.pinCheck; }
   $(".pintab").hidden = cfg.pinterest === false;
   (await cd.downloads()).forEach(j => jobs.set(j.id, j)); updateBadge();
