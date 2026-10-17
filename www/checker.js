@@ -159,7 +159,7 @@ export async function checkItems(q, items, { getImage, useAI = true, strictness 
       // must be in the title or tags.
       const unchecked = aiReady && ai == null;
       const score = ai != null ? 0.75 * ai + 0.25 * text : text * 0.6;
-      const ok = ai != null ? !it.junk && (ai >= thr || (ai >= thr * 0.6 && text >= 0.99))
+      const ok = ai != null ? !it.junk && (ai >= thr || (ai >= thr * 0.85 && strongText(it, q) >= 0.99))
                : !unchecked && strongText(it, q) >= 0.99;
       it.check = { q, text, ai, score, ok, unchecked };
       onEach?.(it);
