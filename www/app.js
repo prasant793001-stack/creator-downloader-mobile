@@ -58,7 +58,7 @@ function badge(it) {
   const c = it.check;
   if (!c || c.q !== state.q) return state.checking && !it.watchOnly ? '<span class="mbadge wait">…</span>' : "";
   const pct = Math.round(100 * (c.ai != null ? c.ai : c.text));
-  return `<span class="mbadge ${c.ok ? "ok" : "bad"}">${c.ok ? "✓" : "✗"} ${pct}%${c.ai == null ? " words" : ""}</span>`;
+  return `<span class="mbadge ${c.ok ? "ok" : "bad"}">${c.ok ? "✓" : "✗"} ${it.junk ? "logo/text" : pct + "%"}${c.ai == null ? " words" : ""}</span>`;
 }
 function cardHTML(it, i, pre = "") {
   const j = jobs.get(queued.get(it.uid)); const done = j?.status === "done";
@@ -568,8 +568,8 @@ async function selftest(mode) {
       const ok = await waitFor(() => state.q === q && !state.busy && state.checkDone && (lastAuto?.q === q), 240000);
       log("search", q, ok ? "finished" : "TIMEOUT", JSON.stringify(Object.fromEntries(Object.entries(state.status).map(([k, v]) => [k, v.err || v.n]))));
       log("counts", `ok=${state.items.filter(it => it.check?.ok).length} weak=${state.items.filter(it => it.check && !it.check.ok).length} unchecked=${state.items.filter(it => !it.check).length} ai-scored=${state.items.filter(it => it.check?.ai != null).length}`);
-      log("results", state.items.slice(0, 10).map(it => `[${it.check?.ok ? "OK" : "--"} ai=${it.check?.ai == null ? "na" : Math.round(it.check.ai * 100)} txt=${Math.round((it.check?.text ?? 0) * 100)} ${it.source}] ${String(it.title).slice(0, 50)}`).join(" || "));
-      log("rejected", state.items.filter(it => it.check && !it.check.ok).slice(0, 8).map(it => `[ai=${it.check.ai == null ? "na" : Math.round(it.check.ai * 100)} txt=${Math.round(it.check.text * 100)} ${it.source}] ${String(it.title).slice(0, 50)}`).join(" || "));
+      log("results", state.items.slice(0, 10).map(it => `[${it.check?.ok ? "OK" : "--"}${it.junk ? " JUNK" : ""} ai=${it.check?.ai == null ? "na" : Math.round(it.check.ai * 100)} txt=${Math.round((it.check?.text ?? 0) * 100)} ${it.source}] ${String(it.title).slice(0, 50)}`).join(" || "));
+      log("rejected", state.items.filter(it => it.check && !it.check.ok).slice(0, 8).map(it => `[${it.junk ? "JUNK " : ""}ai=${it.check.ai == null ? "na" : Math.round(it.check.ai * 100)} txt=${Math.round(it.check.text * 100)} ${it.source}] ${String(it.title).slice(0, 50)}`).join(" || "));
       log("auto", JSON.stringify(lastAuto));
       await shot("search-" + q.replace(/\s+/g, "-"));
       await waitFor(() => (lastAuto?.ids || []).every(id => ["done", "failed"].includes(jobs.get(id)?.status)), 120000);

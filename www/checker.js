@@ -94,7 +94,11 @@ async function textEmbeds(q) {
   const key = q.toLowerCase().trim();
   if (textCache.has(key)) return textCache.get(key);
   const m = await ensureChecker();
-  const prompts = [`a photo of ${q}`, "a photo"];
+  // query, neutral baseline, then "junk" kinds (logos/badges and text images can fool the model by
+  // spelling the words) — skipped when the search itself asks for one.
+  const qw = new Set(terms(q));
+  const junk = ["a logo or badge", "a page of text or a document", "a screenshot", "a poster with large text"].filter(j => !terms(j).some(w => qw.has(w)));
+  const prompts = [`a photo of ${q}`, "a photo", ...junk];
   const inputs = m.tokenizer(prompts, { padding: "max_length", truncation: true });
   const { text_embeds } = await m.text(inputs);
   const dim = text_embeds.dims[1], data = text_embeds.data;
@@ -103,16 +107,18 @@ async function textEmbeds(q) {
   return vecs;
 }
 
-// Score one picture (data: URL or blob URL) against the search words. Returns { p, sim, diff } or null.
+// Score one picture (data: URL or blob URL) against the search words. Returns { p, sim, diff, junk } or null.
 export async function aiScore(q, imageUrl) {
   const m = await ensureChecker();
-  const [tq, tnull] = await textEmbeds(q);
+  const [tq, tnull, ...tjunk] = await textEmbeds(q);
   const image = await lib.RawImage.read(imageUrl);
   const inputs = await m.processor(image);
   const { image_embeds } = await m.vision(inputs);
   const v = norm(image_embeds.data);
-  const sim = dot(v, tq), diff = sim - dot(v, tnull);
-  return { p: toScore(diff), sim, diff };
+  const nul = dot(v, tnull), sim = dot(v, tq), diff = sim - nul;
+  const junkDiff = tjunk.length ? Math.max(...tjunk.map(t => dot(v, t))) - nul : -1;
+  const junk = junkDiff > diff;   // looks more like a logo / text / screenshot than like the topic
+  return { p: junk ? toScore(diff) * 0.5 : toScore(diff), sim, diff, junk };
 }
 
 // Check a list of results. getImage(it) -> data URL (or null). onEach(it) fires as each finishes.
@@ -130,11 +136,11 @@ export async function checkItems(q, items, { getImage, useAI = true, strictness 
       const text = textMatch(it, q);
       let ai = null;
       if (aiReady && it.thumb) {
-        try { const img = await getImage(it); if (img) ai = (await aiScore(q, img)).p; } catch { ai = null; }
+        try { const img = await getImage(it); if (img) { const r = await aiScore(q, img); ai = r.p; it.junk = r.junk; } } catch { ai = null; }
       }
       // With the AI: mostly what the picture shows. Without: words must clearly match.
       const score = ai != null ? 0.75 * ai + 0.25 * text : text * 0.8;
-      const ok = ai != null ? (ai >= thr || (ai >= thr * 0.6 && text >= 0.99)) : strongText(it, q) >= 0.99;
+      const ok = ai != null ? !it.junk && (ai >= thr || (ai >= thr * 0.6 && text >= 0.99)) : strongText(it, q) >= 0.99;
       it.check = { q, text, ai, score, ok };
       onEach?.(it);
     }
