@@ -1,0 +1,18 @@
+name: Checker diagnosis
+on:
+  push:
+    branches: [calib]
+permissions:
+  contents: write
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: |
+          mkdir -p /tmp/d && cp ci/diag.mjs /tmp/d/ && cd /tmp/d && npm init -y >/dev/null && npm i @huggingface/transformers@4.3.0 >/dev/null && node diag.mjs
+          cd out && git init -q -b ci-diag && git config user.name CI && git config user.email ci@users.noreply.github.com && git add -A && git commit -qm diag && git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-diag
